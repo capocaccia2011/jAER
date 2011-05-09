@@ -5,8 +5,9 @@
 
 package org.capocaccia.cne.jaer.cne2011;
 
-import java.util.Observable;
-import java.util.Observer;
+import net.sf.jaer.chip.AEChip;
+import net.sf.jaer.event.*;
+
 import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
 import net.sf.jaer.eventprocessing.EventFilter2D;
@@ -16,7 +17,7 @@ import net.sf.jaer.graphics.FrameAnnotater;
  *
  * @author Eero
  */
-public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Observer{
+public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     /* Kalman filter parameters:*/
     protected double[][] At;
@@ -34,6 +35,9 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     protected double[][] Rt;
     protected double[][] Qt;
 
+    // the timestamp of the most recent received event
+    private int t = -1;
+
     /* Auxiliary matrices used for intermediate results:*/
     protected double[][] Mnn1; //n*n, i.e., the size of At
     protected double[][] Mnn2; //n*n, i.e., the size of At
@@ -48,27 +52,20 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     protected double[][] vk2; //k*1, i.e., the size of meas
 
     // parameters
-    private double measurementSigma = getPrefs().getFloat("KalmanFilter.measurementSigma", 2.0);
+    private double measurementSigma = getPrefs().getDouble("KalmanFilter.measurementSigma", 2.0);
 
-    public KalmanFilter() {
+    public KalmanFilter(AEChip chip) {
+
+        super(chip);
+
         At = new double[6][6];
         Bt = new double[6][2];
         Kt = new double[6][2];
-        mu = new double[6];
+        mu = new double[6][1];
         Sigma = new double[6][6];
 
         resetFilter();
     }
-
-    public KalmanFilter(double[][] mu, double[][] Sigma){
-
-        this.mu = mu;
-        this.Sigma = Sigma;
-
-        resetFilter();
-    }
-
-    public KalmanFilter(){}
 
     public double getMeasurementSigma() {
         return measurementSigma;
@@ -76,7 +73,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     synchronized public void setMeasurementSigma(double measurementSigma) {
 
         if(measurementSigma < 0) measurementSigma = 0;
-        getPrefs().putFloat("KalmanFilter.measurementSigma", measurementSigma);
+        getPrefs().putDouble("KalmanFilter.measurementSigma", measurementSigma);
 
         if(measurementSigma != this.measurementSigma) {
             resetFilter();
@@ -86,7 +83,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     }
 
     @Override
-    public void resetFilter() {
+    final public void resetFilter() {
 
         transposeMatrix(At, AtT);
         transposeMatrix(Ct, CtT);
@@ -110,32 +107,41 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
         if (in == null || in.getSize() == 0)
             return in;
 
+        if (t < 0)
+            t = in.getFirstTimestamp();
+
         for (BasicEvent event : in) {
 
             double[][] meas = new double[2][1];
             meas[0][0] = event.x;
             meas[1][0] = event.y;
 
-            correct(meas);
+            // TODO: get the performed actions from the controller
+            double[][] act = new double[2][1];
+
+            double dt = (double)(event.timestamp - t)/100.0;
+            t = event.timestamp;
+
+            updateFilter(act, meas, dt);
         }
 
-        return in; // only handles control commands, no event processing
+        return in;
     }
 
     public void predictMu(double[][] act){ //act is m*1 matrix
         matrixMultiplication(At,mu,vn1);
         matrixMultiplication(Bt,act,vn2);
-        matrixSum(vn1,vn2,muBel);
+        matrixSum(vn1,vn2,mu);
     }
 
     public void predictSigma(double[][] Rt){
         matrixMultiplication(At, Sigma, Mnn1);
         matrixMultiplication(Mnn1,AtT,Mnn2);
-        matrixSum(Mnn2,Rt,SigmaBel);
+        matrixSum(Mnn2,Rt,Sigma);
     }
 
     public void updateKalmanGain(double[][] Qt){
-        matrixMultiplication(SigmaBel, CtT, Mnk1);
+        matrixMultiplication(Sigma, CtT, Mnk1);
         matrixMultiplication(Ct,Mnk1,Mkk1);
         matrixSum(Mkk1,Qt,Mkk2);
         invert2by2Matrix(Mkk2,Mkk1); //assuming M2 is a 2*2 matrix
@@ -143,22 +149,22 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     }
 
     public void correctMu(double[][] meas){ //meas is k*1 matrix
-        matrixMultiplication(Ct,muBel,vk1);
+        matrixMultiplication(Ct,mu,vk1);
         matrixSubstraction(meas,vk1,vk2);
         matrixMultiplication(Kt,vk2,vn1);
-        matrixSum(muBel,vn1,mu);
+        matrixSum(mu,vn1,mu);
     }
 
     public void correctSigma(){
         matrixMultiplication(Kt,Ct,Mnn1);
-        matrixMultiplication(Mnn1,SigmaBel,Mnn2);
-        matrixSubstraction(SigmaBel,Mnn2,Sigma);
+        matrixMultiplication(Mnn1,Sigma,Mnn2);
+        matrixSubstraction(Sigma,Mnn2,Sigma);
     }
 
-    public void updateFilter(double[][] act, double[][] meas, double dt, double[][] Rt, double[][] Qt){
+    public void updateFilter(double[][] act, double[][] meas, double dt){
 
         predict(act, Rt, dt);
-        update(meas, Qt);
+        correct(meas, Qt);
     }
 
     public void predict(double[][] act, double[][] Rt, double dt) {
@@ -170,7 +176,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
         predictSigma(Rt);
     }
 
-    public void correct(double[][] meas) {
+    public void correct(double[][] meas, double[][] Qt) {
 
         updateKalmanGain(Qt);
         correctMu(meas);
@@ -409,10 +415,4 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
 		gl.glEnd();
 
     }
-
-    @Override
-    public void update(Observable o, Object arg) {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
 }
