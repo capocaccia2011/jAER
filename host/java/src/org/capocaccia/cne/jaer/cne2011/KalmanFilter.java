@@ -5,6 +5,7 @@
 
 package org.capocaccia.cne.jaer.cne2011;
 
+import java.awt.geom.Point2D;
 import net.sf.jaer.chip.AEChip;
 import net.sf.jaer.event.*;
 
@@ -282,21 +283,21 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
 
     public static void matrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
-    result: R=A*B */
-    int Arow = A[0].length;
-    int Acol = A.length;
+        result: R=A*B */
+        int Arow = A[0].length;
+        int Acol = A.length;
 
-    int Brow = B[0].length;
-    int Bcol = B.length;
+        int Brow = B[0].length;
+        int Bcol = B.length;
 
-    for(int i=0; i<Acol; i++){
-        for(int j=0; j<Brow; j++){
-            for(int k=0; k<Arow; k++){
-                R[i][j] += A[i][k]*B[k][j];
+        for(int i=0; i<Acol; i++){
+            for(int j=0; j<Brow; j++){
+                for(int k=0; k<Arow; k++){
+                    R[i][j] += A[i][k]*B[k][j];
+                }
             }
         }
     }
-}
 
     public static void upperTriangularMatrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
     A is an upper triangular matrix, result: R=A*B */
@@ -376,43 +377,70 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     @Override
     public void annotate(GLAutoDrawable drawable) {
 
-		if(!isFilterEnabled())
-			return;
+        if(!isFilterEnabled())
+            return;
 
-		GL gl=drawable.getGL();
+        GL gl=drawable.getGL();
 
-		// draw the Hough space
-		//for (int x = 0; x < cameraX; x++) {
-			//for (int y = 0; y < cameraY; y++) {
+        // draw the Hough space
+        //for (int x = 0; x < cameraX; x++) {
+            //for (int y = 0; y < cameraY; y++) {
 
-				//float red   = (float)accumulatorArray[x][y]/maxValue;
-				//float green = 1.0f - red;
+                //float red   = (float)accumulatorArray[x][y]/maxValue;
+                //float green = 1.0f - red;
 
-				//gl.glColor4f(red,green,0.0f,0.1f);
-				//gl.glRectf(
-						//(float)x-0.5f,
-						//(float)y-0.5f,
-						//(float)x+0.5f,
-						//(float)y+0.5f);
-			//}
-		//}
+                //gl.glColor4f(red,green,0.0f,0.1f);
+                //gl.glRectf(
+                        //(float)x-0.5f,
+                        //(float)y-0.5f,
+                        //(float)x+0.5f,
+                        //(float)y+0.5f);
+            //}
+        //}
 
-		// draw the circle
-		gl.glColor3f(1,1,0);
-		gl.glLineWidth(2);
+        // draw the circle
+        gl.glColor3f(1,1,0);
+        gl.glLineWidth(2);
 
                 int anno_no_points_circle = 10;
                 double anno_radius = 0.1;
 
                 double x = anno_radius*Math.cos(2*Math.PI*anno_no_points_circle);
 
-		gl.glBegin(GL.GL_LINE_LOOP);
-		for (int i = 0;i<anno_no_points_circle;i++){
-			gl.glVertex2d(
-					mu[0][0] + anno_radius*Math.cos(2*Math.PI*i/anno_no_points_circle),
-					mu[0][1] + anno_radius*Math.sin(2*Math.PI*i/anno_no_points_circle));
-		}
-		gl.glEnd();
+        gl.glBegin(GL.GL_LINE_LOOP);
+        for (int i = 0;i<anno_no_points_circle;i++){
+            gl.glVertex2d(
+                    mu[0][0] + anno_radius*Math.cos(2*Math.PI*i/anno_no_points_circle),
+                    mu[0][1] + anno_radius*Math.sin(2*Math.PI*i/anno_no_points_circle));
+        }
+        gl.glEnd();
 
+    }
+
+    public Point2D.Float getBallPosition() {
+
+        Point2D.Float position = new Point2D.Float();
+        position.setLocation(mu[0][0], mu[1][0]);
+        return position;
+    }
+
+    public double getBallPositionX() {
+        return mu[0][0];
+    }
+
+    public double getBallPositionY() {
+        return mu[1][0];
+    }
+    public Point2D.Float getBallVelocity() {
+
+        Point2D.Float position = new Point2D.Float();
+        position.setLocation(mu[2][0], mu[3][0]);
+        return position;
+    }
+
+    public void setBallPosition(Point2D.Float position) {
+        initFilter();
+        mu[0][0] = position.getX();
+        mu[1][0] = position.getY();
     }
 }
