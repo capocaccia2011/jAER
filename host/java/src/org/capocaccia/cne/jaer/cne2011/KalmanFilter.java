@@ -52,6 +52,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     // parameters
     private double measurementSigma = getPrefs().getDouble("KalmanFilter.measurementSigma", 2.0);
+    private double processSigma = getPrefs().getDouble("KalmanFilter.processSigma", 10.0);
 
     public KalmanFilter(AEChip chip) {
 
@@ -92,6 +93,20 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
         if(measurementSigma != this.measurementSigma) {
             this.measurementSigma = measurementSigma;
+            resetFilter();
+        }
+    }
+
+    public double setProcessSigma() {
+        return processSigma;
+    }
+    synchronized public void setProcessSigma(double processSigma) {
+
+        if(processSigma < 0) processSigma = 0;
+        getPrefs().putDouble("KalmanFilter.processSigma", processSigma);
+
+        if(processSigma != this.processSigma) {
+            this.processSigma = processSigma;
             resetFilter();
         }
     }
@@ -193,6 +208,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         updateAt(dt);
         updateBt(dt);
         updateRt(dt);
+        // checkRtComputation();
     	System.out.println("At = \n" + matrixToString( At ) );
     	System.out.println("Bt = \n" + matrixToString( Bt ) );
     	System.out.println("Rt = \n" + matrixToString( Rt ) );
@@ -230,8 +246,8 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     public void updateBt(double dt){  /** Assuming Bt is initialized as double[6][2] */
 
-        double a = 0.5*dt*dt;
-        double b = dt;
+        final double a = 0.5*dt*dt;
+        final double b = dt;
 
         Bt[0][0] = a; //constant
         Bt[1][1] = a;
@@ -243,29 +259,75 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
 
     public void updateRt(double dt){ /** Assuming Rt is initialized as double[6][6] */
-        double a = 0.5*dt*dt;
-        double b = dt;
+        final double a = 0.5*dt*dt;
+        final double b = dt;
 
-        Rt[0][0] = a*a;
-        Rt[0][2] = a*b;
-        Rt[0][4] = a;
-        Rt[1][1] = a*a;
-        Rt[1][3] = a*b;
-        Rt[1][5] = a;
-        Rt[2][0] = a*b;
-        Rt[2][2] = b*b;
-        Rt[2][4] = b;
-        Rt[3][1] = a*b;
-        Rt[3][3] = b*b;
-        Rt[3][5] = b;
-        Rt[4][0] = a;
-        Rt[4][2] = b;
-        Rt[4][4] = 1; //constant
-        Rt[5][1] = a;
-        Rt[5][3] = b;
-        Rt[5][5] = 1; //constant
+        final double cov = processSigma*processSigma;
+        final double acov = a*cov;
+        final double bcov = b*cov;
+        final double aacov = a*acov;
+        final double abcov = a*bcov;
+        final double bbcov = b*bcov;
+        
+        Rt[0][0] = aacov;
+        Rt[0][2] = abcov;
+        Rt[0][4] = acov;
+        Rt[1][1] = aacov;
+        Rt[1][3] = abcov;
+        Rt[1][5] = acov;
+        Rt[2][0] = abcov;
+        Rt[2][2] = bbcov;
+        Rt[2][4] = bcov;
+        Rt[3][1] = abcov;
+        Rt[3][3] = bbcov;
+        Rt[3][5] = bcov;
+        Rt[4][0] = acov;
+        Rt[4][2] = bcov;
+        Rt[4][4] = cov;
+        Rt[5][1] = acov;
+        Rt[5][3] = bcov;
+        Rt[5][5] = cov;        
     }
 
+    private void checkRtComputation()
+    {
+        final double cov = processSigma*processSigma;
+	    double[][] procNoiseCov = new double[2][2];
+	    procNoiseCov[0][0] = cov;
+	    procNoiseCov[1][1] = cov;
+	    double[][] t1 = new double[6][2];
+	    matrixMultiplication( Bt, procNoiseCov, t1 );
+	    double[][] t2 = new double[6][6];
+	    double[][] BtT = new double[2][6];
+	    transposeMatrix( Bt, BtT );
+	    System.out.println( matrixToString( Bt ) );
+	    System.out.println( matrixToString( BtT ) );
+	    matrixMultiplication( t1, BtT, t2 );
+	    
+	    boolean ok = true;
+	    for ( int i = 0; i < 6; ++i )
+	    {
+	        for ( int j = 0; j < 6; ++j )
+	        {
+	        	double dsqu = ( Rt[i][j] - t2[i][j] ) * ( Rt[i][j] - t2[i][j] );
+	        	if ( dsqu > 0.00000001 )
+	        		ok = false;
+	        }
+	    }
+	    
+	    if (!ok) {
+		    double[][] diff = new double[6][6];
+		    matrixSubstraction( Rt, t2, diff );
+		    System.out.println( "updateRt() is broken. diff to expected matrix is" );
+		    System.out.println( matrixToString( diff ) );
+	    }
+	    else
+	    {
+		    System.out.println( "updateRt() is ok." );
+	    }
+    }
+    
+    
     public static void matrixCopy(double[][] A, double[][] R){
 
         int Arow = A[0].length;
