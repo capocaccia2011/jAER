@@ -609,6 +609,8 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		BasicEvent outEvent = itr.nextOutput();
 		outEvent.x = (short)maxCoordinate[i].x;
 		outEvent.y = (short)maxCoordinate[i].y;
+                outEvent.timestamp = (int) timeStamp;
+                //this timestamp is only on packet resolution!
                 }
 		// pass events unchanged to next filter
 		return out;
