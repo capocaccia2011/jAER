@@ -7,7 +7,9 @@ package org.capocaccia.cne.jaer.cne2011;
 
 import java.util.Observable;
 import java.util.Observer;
+import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
+import net.sf.jaer.eventprocessing.EventFilter2D;
 import net.sf.jaer.graphics.FrameAnnotater;
 
 /**
@@ -32,7 +34,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     protected double[][] Qt;
 
     //protected double[][] Rt;
-    protected double[][] Qt;
+    //protected double[][] Qt;
 
     /* Auxiliary matrices used for intermediate results:*/
     protected double[][] Mnn1; //n*n, i.e., the size of At
@@ -375,14 +377,19 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
 		//}
 
 		// draw the circle
-		gl.glColor3f(1,0,0);
+		gl.glColor3f(1,1,0);
 		gl.glLineWidth(2);
 
+                int anno_no_points_circle = 10;
+                double anno_radius = 0.1;
+
+                double x = anno_radius*Math.cos(2*Math.PI*anno_no_points_circle);
+
 		gl.glBegin(GL.GL_LINE_LOOP);
-		for (int i = 0;i<angleListLength;i++){
+		for (int i = 0;i<anno_no_points_circle;i++){
 			gl.glVertex2d(
-					circleOutline[i].x + maxCoordinate.x,
-					circleOutline[i].y + maxCoordinate.y);
+					mu[0][0] + anno_radius*Math.cos(2*Math.PI*i/anno_no_points_circle),
+					mu[0][1] + anno_radius*Math.sin(2*Math.PI*i/anno_no_points_circle));
 		}
 		gl.glEnd();
 
