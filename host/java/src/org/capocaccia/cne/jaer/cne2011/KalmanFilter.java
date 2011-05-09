@@ -51,6 +51,11 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     protected double[][] vk1; //k*1, i.e., the size of meas
     protected double[][] vk2; //k*1, i.e., the size of meas
 
+    /*Auxiliary matrices used for annotating:*/
+    double[][] auxvec1 = new double[2][1];
+    double[][] auxmatr = new double[2][2];
+    double[][] auxvec2 = new double[2][1];
+
     // parameters
     private double measurementSigma = getPrefs().getDouble("KalmanFilter.measurementSigma", 2.0);
 
@@ -423,38 +428,49 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
         GL gl=drawable.getGL();
 
-        // draw the Hough space
-        //for (int x = 0; x < cameraX; x++) {
-            //for (int y = 0; y < cameraY; y++) {
-
-                //float red   = (float)accumulatorArray[x][y]/maxValue;
-                //float green = 1.0f - red;
-
-                //gl.glColor4f(red,green,0.0f,0.1f);
-                //gl.glRectf(
-                        //(float)x-0.5f,
-                        //(float)y-0.5f,
-                        //(float)x+0.5f,
-                        //(float)y+0.5f);
-            //}
-        //}
-
-        // draw the circle
         gl.glColor3f(1,1,0);
         gl.glLineWidth(2);
 
-                int anno_no_points_circle = 10;
-                double anno_radius = 0.1;
+        int no_points_ellipse= 10;
+        double ellipse_radius = 4;
 
-                double x = anno_radius*Math.cos(2*Math.PI*anno_no_points_circle);
+
+        auxmatr[0][0] = Sigma[0][0];
+        auxmatr[0][1] = Sigma[0][1];
+        auxmatr[1][0] = Sigma[1][0];
+        auxmatr[1][1] = Sigma[1][1];
 
         gl.glBegin(GL.GL_LINE_LOOP);
-        for (int i = 0;i<anno_no_points_circle;i++){
+        for (int i = 0;i<no_points_ellipse;i++){
+            auxvec1[0][0] = Math.cos(2*Math.PI*i/no_points_ellipse);
+            auxvec1[1][0] = Math.sin(2*Math.PI*i/no_points_ellipse);
+            matrixMultiplication(auxmatr,auxvec1,auxvec2);
+
             gl.glVertex2d(
-                    mu[0][0] + anno_radius*Math.cos(2*Math.PI*i/anno_no_points_circle),
-                    mu[1][0] + anno_radius*Math.sin(2*Math.PI*i/anno_no_points_circle));
+                    mu[0][0] + ellipse_radius*auxvec2[0][0],
+                    mu[1][0] + ellipse_radius*auxvec2[0][1]);
         }
         gl.glEnd();
+
+        double velx = mu[2][0];
+        double vely = mu[3][0];
+
+        double speed = Math.sqrt(velx*velx+vely*vely);
+        double direction = Math.atan(vely/velx);
+
+
+        gl.glColor3f(1,0,0);
+        gl.glLineWidth(4);
+
+        gl.glBegin(GL.GL_LINE_LOOP);
+        gl.glVertex2d(mu[0][0],mu[1][0]);
+        gl.glVertex2d(mu[0][0] + speed*Math.cos(direction),
+                      mu[1][0] + speed*Math.sin(direction));
+
+        gl.glEnd();
+
+
+
     }
 
     public Point2D.Float getBallPosition() {
