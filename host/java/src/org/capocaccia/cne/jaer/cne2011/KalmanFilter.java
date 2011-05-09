@@ -389,6 +389,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
             R[i][j] = sum;
         }
     }
+    }
 
     public static void upperTriangularMatrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
     A is an upper triangular matrix, result: R=A*B */
