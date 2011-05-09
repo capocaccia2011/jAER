@@ -3,7 +3,7 @@
  * and open the template in the editor.
  */
 
-package kalmanfilter;
+package org.capocaccia.cne.jaer.cne2011;
 
 /**
  *
@@ -23,6 +23,11 @@ public class KalmanFilter {
     protected double[][] SigmaBel;
     protected double dt;
     protected double[][] Kt;
+    protected double sigma_epsilon;
+    protected double sigma_delta;
+    protected double[][] Rt;
+    protected double[][] Qt;
+
     //protected double[][] Rt;
     //protected double[][] Qt;
 
@@ -90,6 +95,49 @@ public class KalmanFilter {
         updateKalmanGain(Qt);
         updateMu(meas);
         updateSigma();
+    }
+
+    public void updateAt(double dt){  /** Assuming At is initialized as double[6][6] */
+        double a = 0.5*dt*dt;
+        double b = dt;
+
+        At[0][0] = 1; //constant
+        At[0][2] = b;
+        At[0][4] = a;
+        At[1][1] = 1; //constant
+        At[1][3] = b;
+        At[1][5] = a;
+        At[2][2] = 1; //constant
+        At[2][4] = b;
+        At[3][3] = 1; //constant
+        At[3][5] = b;
+        At[4][4] = 1; //constant
+        At[5][5] = 1; //constant
+    }
+
+
+    public void updateRt(double dt){ /** Assuming Rt is initialized as double[6][6] */
+        double a = 0.5*dt*dt;
+        double b = dt;
+
+        Rt[0][0] = a*a;
+        Rt[0][2] = a*b;
+        Rt[0][4] = a;
+        Rt[1][1] = a*a;
+        Rt[1][3] = a*b;
+        Rt[1][5] = a;
+        Rt[2][0] = a*b;
+        Rt[2][2] = b*b;
+        Rt[2][4] = b;
+        Rt[3][1] = a*b;
+        Rt[3][3] = b*b;
+        Rt[3][5] = b;
+        Rt[4][0] = a;
+        Rt[4][2] = b;
+        Rt[4][4] = 1; //constant
+        Rt[5][1] = a;
+        Rt[5][3] = b;
+        Rt[5][5] = 1; //constant
     }
 
     public static void matrixCopy(double[][] A, double[][] R){
