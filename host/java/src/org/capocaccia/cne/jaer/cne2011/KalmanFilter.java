@@ -369,17 +369,18 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     public static void matrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
     result: R=A*B */
-    int Arow = A[0].length;
-    int Acol = A.length;
+    int Arows = A.length;
+    int Acols = A[0].length;
 
-    int Brow = B[0].length;
-//    int Bcol = B.length;
+    int Bcols = B[0].length;
 
-    for(int i=0; i<Acol; i++){
-        for(int j=0; j<Brow; j++){
-            for(int k=0; k<Arow; k++){
-                R[i][j] += A[i][k]*B[k][j];
+    for(int i=0; i<Arows; i++){
+        for(int j=0; j<Bcols; j++){
+        	double sum = 0;
+            for(int k=0; k<Acols; k++){
+                sum += A[i][k]*B[k][j];
             }
+            R[i][j] = sum;
         }
     }
 }
@@ -394,9 +395,11 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     for(int i=0; i<Acol; i++){
         for(int j=0; j<Brow; j++){
+        	double sum = 0;
             for(int k=i; k<Arow; k++){
-                R[i][j] += A[i][k]*B[k][j];
+            	sum += A[i][k]*B[k][j];
             }
+        	R[i][j] = sum;
         }
     }
 }
@@ -411,20 +414,22 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     for(int i=0; i<Acol; i++){
         for(int j=0; j<Brow; j++){
+        	double sum = 0;
             for(int k=0; k<=i; k++){
-                R[i][j] += A[i][k]*B[k][j];
+            	sum += A[i][k]*B[k][j];
             }
+            R[i][j] = sum;
         }
     }
 }
 
     public static void transposeMatrix(double[][] A, double[][] R){/** result: R = transpose(A)*/
-        int Arow = A[0].length;
-        int Acol = A.length;
+        int Arows = A.length;
+        int Acols = A[0].length;
 
-        for(int i=0; i<Acol; i++){
-            for(int j=0; j<Arow; j++){
-                R[i][j] = A[j][i];
+        for(int i=0; i<Arows; i++){
+            for(int j=0; j<Acols; j++){
+                R[j][i] = A[i][j];
             }
         }
     }
