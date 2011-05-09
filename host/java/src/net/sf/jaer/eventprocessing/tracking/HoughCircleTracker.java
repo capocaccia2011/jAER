@@ -65,6 +65,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
         private float   decay          = getPrefs().getFloat("Hough.CircleTracker.decay", 1.0f);
         private int     nrMax          = getPrefs().getInt("Hough.CircleTracker.nrMax", 4);
         private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
+        private boolean drawHough      = getPrefs().getBoolean("HoughCircleTracker.drawHough", false);
 
 
 	public boolean isGeneratingFilter() {
@@ -167,6 +168,16 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
             this.decayMode = decayMode;
         }
 
+        public boolean getDrawHough(){
+            return drawHough;
+        }
+
+        synchronized public void setDrawHough(boolean drawHough){
+            getPrefs().putBoolean("HoughCircleTracker.drawHough",drawHough);
+            if(drawHough != this.drawHough) resetFilter();
+            this.drawHough = drawHough;
+        }
+
 	public float getRadius() {
 		return radius;
 	}
@@ -257,6 +268,8 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		GL gl=drawable.getGL();
 
 		// draw the Hough space
+                if(drawHough == true)
+                {
 		for (int x = 0; x < cameraX; x++) {
 			for (int y = 0; y < cameraY; y++) {
 
@@ -271,6 +284,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 						(float)y+0.5f);
 			}
 		}
+                }
 
 		// draw the circle
 		gl.glColor4f(0.0f,0.0f,1.0f,1.0f);
