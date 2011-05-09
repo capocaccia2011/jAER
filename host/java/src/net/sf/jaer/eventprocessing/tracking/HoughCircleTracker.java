@@ -256,14 +256,16 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	public void annotate(float[][][] frame) {
 	}
 
-	//public void annotate(Graphics2D g) {
-	//}
+	public void annotate(Graphics2D g) {
+	}
 
         @Override
 	public void annotate(GLAutoDrawable drawable) {
 
 		if(!isFilterEnabled())
 			return;
+                if(drawable == null)
+                    return;
 
 		GL gl=drawable.getGL();
 
@@ -607,9 +609,11 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		BasicEvent outEvent = itr.nextOutput();
 		outEvent.x = (short)maxCoordinate[i].x;
 		outEvent.y = (short)maxCoordinate[i].y;
+                outEvent.timestamp = (int) timeStamp;
+                //this timestamp is only on packet resolution!
                 }
 		// pass events unchanged to next filter
-		return in;
+		return out;
 	}
 
 	synchronized public boolean isLogDataEnabled() {
