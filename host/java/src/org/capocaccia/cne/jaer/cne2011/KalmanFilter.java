@@ -5,12 +5,16 @@
 
 package org.capocaccia.cne.jaer.cne2011;
 
+import java.util.Observable;
+import java.util.Observer;
+import javax.media.opengl.GLAutoDrawable;
+import net.sf.jaer.graphics.FrameAnnotater;
+
 /**
  *
  * @author Eero
  */
-public class KalmanFilter extends EventFilter2D {
-
+public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Observer{
     /* Kalman filter parameters:*/
     protected double[][] At;
     protected double[][] AtT;
@@ -334,6 +338,59 @@ public class KalmanFilter extends EventFilter2D {
     R[1][0] = -(1/detA)*A[1][0];
     R[1][1] = (1/detA)*A[0][0];
     }
+    }
+
+    @Override
+    public void setAnnotationEnabled(boolean yes) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public boolean isAnnotationEnabled() {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public void annotate(GLAutoDrawable drawable) {
+
+		if(!isFilterEnabled())
+			return;
+
+		GL gl=drawable.getGL();
+
+		// draw the Hough space
+		//for (int x = 0; x < cameraX; x++) {
+			//for (int y = 0; y < cameraY; y++) {
+
+				//float red   = (float)accumulatorArray[x][y]/maxValue;
+				//float green = 1.0f - red;
+
+				//gl.glColor4f(red,green,0.0f,0.1f);
+				//gl.glRectf(
+						//(float)x-0.5f,
+						//(float)y-0.5f,
+						//(float)x+0.5f,
+						//(float)y+0.5f);
+			//}
+		//}
+
+		// draw the circle
+		gl.glColor3f(1,0,0);
+		gl.glLineWidth(2);
+
+		gl.glBegin(GL.GL_LINE_LOOP);
+		for (int i = 0;i<angleListLength;i++){
+			gl.glVertex2d(
+					circleOutline[i].x + maxCoordinate.x,
+					circleOutline[i].y + maxCoordinate.y);
+		}
+		gl.glEnd();
+
+    }
+
+    @Override
+    public void update(Observable o, Object arg) {
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
 }
