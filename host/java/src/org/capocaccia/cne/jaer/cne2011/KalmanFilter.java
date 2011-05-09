@@ -21,38 +21,42 @@ import net.sf.jaer.graphics.FrameAnnotater;
 public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     /* Kalman filter parameters:*/
-    protected double[][] At;
-    protected double[][] AtT;
-    protected double[][] Bt;
-    protected double[][] Ct;
-    protected double[][] CtT;
+    private double[][] At;
+    private double[][] AtT;
+    private double[][] Bt;
+    private double[][] Ct;
+    private double[][] CtT;
 
-    protected double[][] mu;
-    protected double[][] Sigma;
+    private double[][] mu;
+    private double[][] Sigma;
 
-    protected double[][] Kt;
-    protected double sigma_epsilon;
-    protected double sigma_delta;
-    protected double[][] Rt;
-    protected double[][] Qt;
+    private double[][] Kt;
+    private double[][] Rt;
+    private double[][] Qt;
 
     // the timestamp of the most recent received event
     private int t = -1;
 
     /* Auxiliary matrices used for intermediate results:*/
-    protected double[][] Mnn1; //n*n, i.e., the size of At
-    protected double[][] Mnn2; //n*n, i.e., the size of At
-    protected double[][] Mnk1; //n*k, i.e., the size of Kt and CtT
-    protected double[][] Mkk1; //k*k, i.e., the size of Qt
-    protected double[][] Mkk2; //k*k, i.e., the size of Qt
+    private double[][] Mnn1; //n*n, i.e., the size of At
+    private double[][] Mnn2; //n*n, i.e., the size of At
+    private double[][] Mnk1; //n*k, i.e., the size of Kt and CtT
+    private double[][] Mkk1; //k*k, i.e., the size of Qt
+    private double[][] Mkk2; //k*k, i.e., the size of Qt
 
-    protected double[][] vn1; //n*1, i.e., the size of mu
-    protected double[][] vn2; //n*1, i.e., the size of mu
-    protected double[][] vk1; //k*1, i.e., the size of meas
-    protected double[][] vk2; //k*1, i.e., the size of meas
+    private double[][] vn1; //n*1, i.e., the size of mu
+    private double[][] vn2; //n*1, i.e., the size of mu
+    private double[][] vk1; //k*1, i.e., the size of meas
+    private double[][] vk2; //k*1, i.e., the size of meas
+
+    /*Auxiliary matrices used for annotating:*/
+    double[][] auxvec1 = new double[2][1];
+    double[][] auxmatr = new double[2][2];
+    double[][] auxvec2 = new double[2][1];
 
     // parameters
     private double measurementSigma = getPrefs().getDouble("KalmanFilter.measurementSigma", 2.0);
+    private double processSigma = getPrefs().getDouble("KalmanFilter.processSigma", 10.0);
 
     public KalmanFilter(AEChip chip) {
 
@@ -73,6 +77,9 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
         vn1 = new double[6][1];
         vn2 = new double[6][1];
+        
+        vk1 = new double[2][1];
+        vk2 = new double[2][1];
 
         Mnn1 = new double[6][6];
         Mnn2 = new double[6][6];
@@ -97,11 +104,26 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         }
     }
 
+    public double setProcessSigma() {
+        return processSigma;
+    }
+    synchronized public void setProcessSigma(double processSigma) {
+
+        if(processSigma < 0) processSigma = 0;
+        getPrefs().putDouble("KalmanFilter.processSigma", processSigma);
+
+        if(processSigma != this.processSigma) {
+            this.processSigma = processSigma;
+            resetFilter();
+        }
+    }
+
     @Override
     final public void resetFilter()
     {
-        Qt[0][0] = measurementSigma;
-        Qt[1][1] = measurementSigma;
+    	final double measCov = measurementSigma * measurementSigma;
+        Qt[0][0] = measCov;
+        Qt[1][1] = measCov;
 
         for ( int i = 0; i < 6; ++i )
         {
@@ -111,7 +133,10 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
             Sigma[i][i] = 0.1; // TODO   THIS IS ONLY FOR TESTING 
         }
-        
+
+        Ct[0][0] = 1;
+        Ct[1][1] = 1;
+        transposeMatrix( Ct, CtT );
     }
 
     @Override
@@ -190,22 +215,34 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     public void predict(double[][] act, double dt) {
 
-        System.out.println("predict (" + matrixToString( act ) + ", " + dt + ")" );
+    	// System.out.println("predict (" + matrixToString( act ) + ", " + dt + ")" );
         updateAt(dt);
         updateBt(dt);
         updateRt(dt);
-        System.out.println("At = \n" + matrixToString( At ) );
-        System.out.println("Bt = \n" + matrixToString( Bt ) );
-        System.out.println("Rt = \n" + matrixToString( Rt ) );
+        // checkRtComputation();
+    	// System.out.println("At = \n" + matrixToString( At ) );
+    	// System.out.println("AtT = \n" + matrixToString( AtT ) );
+    	// System.out.println("Bt = \n" + matrixToString( Bt ) );
+    	// System.out.println("Rt = \n" + matrixToString( Rt ) );
+    	// System.out.println("mu = \n" + matrixToString( mu ) );
+    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
         predictMu(act);
         predictSigma();
+    	// System.out.println("mu = \n" + matrixToString( mu ) );
+    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
     }
 
     public void correct(double[][] meas) {
 
+    	// System.out.println("correct (" + matrixToString( meas ) + ")" );
         updateKalmanGain();
+    	// System.out.println("Kt = \n" + matrixToString( Kt ) );
+    	// System.out.println("mu = \n" + matrixToString( mu ) );
+    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
         correctMu(meas);
         correctSigma();
+    	// System.out.println("mu = \n" + matrixToString( mu ) );
+    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
     }
 
     public void updateAt(double dt){  /** Assuming At is initialized as double[6][6] */
@@ -231,8 +268,8 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     public void updateBt(double dt){  /** Assuming Bt is initialized as double[6][2] */
 
-        double a = 0.5*dt*dt;
-        double b = dt;
+        final double a = 0.5*dt*dt;
+        final double b = dt;
 
         Bt[0][0] = a; //constant
         Bt[1][1] = a;
@@ -244,29 +281,75 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
 
     public void updateRt(double dt){ /** Assuming Rt is initialized as double[6][6] */
-        double a = 0.5*dt*dt;
-        double b = dt;
+        final double a = 0.5*dt*dt;
+        final double b = dt;
 
-        Rt[0][0] = a*a;
-        Rt[0][2] = a*b;
-        Rt[0][4] = a;
-        Rt[1][1] = a*a;
-        Rt[1][3] = a*b;
-        Rt[1][5] = a;
-        Rt[2][0] = a*b;
-        Rt[2][2] = b*b;
-        Rt[2][4] = b;
-        Rt[3][1] = a*b;
-        Rt[3][3] = b*b;
-        Rt[3][5] = b;
-        Rt[4][0] = a;
-        Rt[4][2] = b;
-        Rt[4][4] = 1; //constant
-        Rt[5][1] = a;
-        Rt[5][3] = b;
-        Rt[5][5] = 1; //constant
+        final double cov = processSigma*processSigma;
+        final double acov = a*cov;
+        final double bcov = b*cov;
+        final double aacov = a*acov;
+        final double abcov = a*bcov;
+        final double bbcov = b*bcov;
+        
+        Rt[0][0] = aacov;
+        Rt[0][2] = abcov;
+        Rt[0][4] = acov;
+        Rt[1][1] = aacov;
+        Rt[1][3] = abcov;
+        Rt[1][5] = acov;
+        Rt[2][0] = abcov;
+        Rt[2][2] = bbcov;
+        Rt[2][4] = bcov;
+        Rt[3][1] = abcov;
+        Rt[3][3] = bbcov;
+        Rt[3][5] = bcov;
+        Rt[4][0] = acov;
+        Rt[4][2] = bcov;
+        Rt[4][4] = cov;
+        Rt[5][1] = acov;
+        Rt[5][3] = bcov;
+        Rt[5][5] = cov;        
     }
 
+    private void checkRtComputation()
+    {
+        final double cov = processSigma*processSigma;
+	    double[][] procNoiseCov = new double[2][2];
+	    procNoiseCov[0][0] = cov;
+	    procNoiseCov[1][1] = cov;
+	    double[][] t1 = new double[6][2];
+	    matrixMultiplication( Bt, procNoiseCov, t1 );
+	    double[][] t2 = new double[6][6];
+	    double[][] BtT = new double[2][6];
+	    transposeMatrix( Bt, BtT );
+	    System.out.println( matrixToString( Bt ) );
+	    System.out.println( matrixToString( BtT ) );
+	    matrixMultiplication( t1, BtT, t2 );
+	    
+	    boolean ok = true;
+	    for ( int i = 0; i < 6; ++i )
+	    {
+	        for ( int j = 0; j < 6; ++j )
+	        {
+	        	double dsqu = ( Rt[i][j] - t2[i][j] ) * ( Rt[i][j] - t2[i][j] );
+	        	if ( dsqu > 0.00000001 )
+	        		ok = false;
+	        }
+	    }
+	    
+	    if (!ok) {
+		    double[][] diff = new double[6][6];
+		    matrixSubstraction( Rt, t2, diff );
+		    System.out.println( "updateRt() is broken. diff to expected matrix is" );
+		    System.out.println( matrixToString( diff ) );
+	    }
+	    else
+	    {
+		    System.out.println( "updateRt() is ok." );
+	    }
+    }
+    
+    
     public static void matrixCopy(double[][] A, double[][] R){
 
         int Arow = A[0].length;
@@ -307,20 +390,21 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
 
     public static void matrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
-        result: R=A*B */
-        int Arow = A[0].length;
-        int Acol = A.length;
+    result: R=A*B */
+    int Arows = A.length;
+    int Acols = A[0].length;
 
-    int Brow = B[0].length;
-//    int Bcol = B.length;
+    int Bcols = B[0].length;
 
-        for(int i=0; i<Acol; i++){
-            for(int j=0; j<Brow; j++){
-                for(int k=0; k<Arow; k++){
-                    R[i][j] += A[i][k]*B[k][j];
-                }
+    for(int i=0; i<Arows; i++){
+        for(int j=0; j<Bcols; j++){
+        	double sum = 0;
+            for(int k=0; k<Acols; k++){
+                sum += A[i][k]*B[k][j];
             }
+            R[i][j] = sum;
         }
+    }
     }
 
     public static void upperTriangularMatrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
@@ -333,9 +417,11 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     for(int i=0; i<Acol; i++){
         for(int j=0; j<Brow; j++){
+        	double sum = 0;
             for(int k=i; k<Arow; k++){
-                R[i][j] += A[i][k]*B[k][j];
+            	sum += A[i][k]*B[k][j];
             }
+        	R[i][j] = sum;
         }
     }
 }
@@ -350,20 +436,22 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
     for(int i=0; i<Acol; i++){
         for(int j=0; j<Brow; j++){
+        	double sum = 0;
             for(int k=0; k<=i; k++){
-                R[i][j] += A[i][k]*B[k][j];
+            	sum += A[i][k]*B[k][j];
             }
+            R[i][j] = sum;
         }
     }
 }
 
     public static void transposeMatrix(double[][] A, double[][] R){/** result: R = transpose(A)*/
-        int Arow = A[0].length;
-        int Acol = A.length;
+        int Arows = A.length;
+        int Acols = A[0].length;
 
-        for(int i=0; i<Acol; i++){
-            for(int j=0; j<Arow; j++){
-                R[i][j] = A[j][i];
+        for(int i=0; i<Arows; i++){
+            for(int j=0; j<Acols; j++){
+                R[j][i] = A[i][j];
             }
         }
     }
@@ -423,38 +511,49 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
         GL gl=drawable.getGL();
 
-        // draw the Hough space
-        //for (int x = 0; x < cameraX; x++) {
-            //for (int y = 0; y < cameraY; y++) {
-
-                //float red   = (float)accumulatorArray[x][y]/maxValue;
-                //float green = 1.0f - red;
-
-                //gl.glColor4f(red,green,0.0f,0.1f);
-                //gl.glRectf(
-                        //(float)x-0.5f,
-                        //(float)y-0.5f,
-                        //(float)x+0.5f,
-                        //(float)y+0.5f);
-            //}
-        //}
-
-        // draw the circle
         gl.glColor3f(1,1,0);
         gl.glLineWidth(2);
 
-                int anno_no_points_circle = 10;
-                double anno_radius = 0.1;
+        int no_points_ellipse = 12;
+        double ellipse_radius = 4;
 
-                double x = anno_radius*Math.cos(2*Math.PI*anno_no_points_circle);
+
+        auxmatr[0][0] = Sigma[0][0];
+        auxmatr[0][1] = Sigma[0][1];
+        auxmatr[1][0] = Sigma[1][0];
+        auxmatr[1][1] = Sigma[1][1];
 
         gl.glBegin(GL.GL_LINE_LOOP);
-        for (int i = 0;i<anno_no_points_circle;i++){
+        for (int i = 0;i<no_points_ellipse;i++){
+            auxvec1[0][0] = Math.cos(2*Math.PI*i/no_points_ellipse);
+            auxvec1[1][0] = Math.sin(2*Math.PI*i/no_points_ellipse);
+            matrixMultiplication(auxmatr,auxvec1,auxvec2);
+
             gl.glVertex2d(
-                    mu[0][0] + anno_radius*Math.cos(2*Math.PI*i/anno_no_points_circle),
-                    mu[1][0] + anno_radius*Math.sin(2*Math.PI*i/anno_no_points_circle));
+                    mu[0][0] + ellipse_radius*auxvec2[0][0],
+                    mu[1][0] + ellipse_radius*auxvec2[0][1]);
         }
         gl.glEnd();
+
+        double velx = mu[2][0];
+        double vely = mu[3][0];
+
+        double speed = Math.sqrt(velx*velx+vely*vely);
+        double direction = Math.atan(vely/velx);
+
+
+        gl.glColor3f(1,0,0);
+        gl.glLineWidth(4);
+
+        gl.glBegin(GL.GL_LINE_LOOP);
+        gl.glVertex2d(mu[0][0],mu[1][0]);
+        gl.glVertex2d(mu[0][0] + speed*Math.cos(direction),
+                      mu[1][0] + speed*Math.sin(direction));
+
+        gl.glEnd();
+
+
+
     }
 
     public Point2D.Float getBallPosition() {
