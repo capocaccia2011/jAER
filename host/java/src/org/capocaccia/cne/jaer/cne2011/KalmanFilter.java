@@ -431,7 +431,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         gl.glColor3f(1,1,0);
         gl.glLineWidth(2);
 
-        int no_points_ellipse= 10;
+        int no_points_ellipse = 12;
         double ellipse_radius = 4;
 
 
