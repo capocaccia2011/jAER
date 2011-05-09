@@ -17,6 +17,7 @@ import net.sf.jaer.graphics.FrameAnnotater;
  * @author Eero
  */
 public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Observer{
+
     /* Kalman filter parameters:*/
     protected double[][] At;
     protected double[][] AtT;
@@ -32,9 +33,6 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     protected double sigma_delta;
     protected double[][] Rt;
     protected double[][] Qt;
-
-    //protected double[][] Rt;
-    //protected double[][] Qt;
 
     /* Auxiliary matrices used for intermediate results:*/
     protected double[][] Mnn1; //n*n, i.e., the size of At
@@ -62,10 +60,8 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
         resetFilter();
     }
 
-    public KalmanFilter(double[][] At, double[][] Bt, double[][] Ct, double[][] mu, double[][] Sigma){
-        this.At = At;
-        this.Bt = Bt;
-        this.Ct = Ct;
+    public KalmanFilter(double[][] mu, double[][] Sigma){
+
         this.mu = mu;
         this.Sigma = Sigma;
 
@@ -93,7 +89,6 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     public void resetFilter() {
 
         transposeMatrix(At, AtT);
-        transposeMatrix(Bt, BtT);
         transposeMatrix(Ct, CtT);
 
         Qt = new double[2][2];
@@ -162,24 +157,28 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
 
     public void updateFilter(double[][] act, double[][] meas, double dt, double[][] Rt, double[][] Qt){
 
-        // TODO: compute Rt from dt
         predict(act, Rt, dt);
         update(meas, Qt);
     }
 
     public void predict(double[][] act, double[][] Rt, double dt) {
 
+        updateAt(dt);
+        updateBt(dt);
+        updateRt(dt);
         predictMu(act);
         predictSigma(Rt);
     }
 
     public void correct(double[][] meas) {
+
         updateKalmanGain(Qt);
         correctMu(meas);
         correctSigma();
     }
 
     public void updateAt(double dt){  /** Assuming At is initialized as double[6][6] */
+
         double a = 0.5*dt*dt;
         double b = dt;
 
@@ -195,6 +194,21 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
         At[3][5] = b;
         At[4][4] = 1; //constant
         At[5][5] = 1; //constant
+
+        transposeMatrix(At, AtT);
+    }
+
+    public void updateBt(double dt){  /** Assuming At is initialized as double[6][6] */
+
+        double a = 0.5*dt*dt;
+        double b = dt;
+
+        Bt[0][0] = a; //constant
+        Bt[1][1] = a;
+        Bt[2][0] = b;
+        Bt[3][1] = b; //constant
+        Bt[4][0] = 1;
+        Bt[5][1] = 1;
     }
 
 
@@ -223,6 +237,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater, Obser
     }
 
     public static void matrixCopy(double[][] A, double[][] R){
+
         int Arow = A[0].length;
         int Acol = A.length;
 
