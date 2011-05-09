@@ -36,6 +36,12 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
         //for decay in Hough space
         float timeStamp = 0;
 
+        // the running maxima in Hough space
+	Coordinate[] maxCoordinate;
+
+        // the running values of the current maximum in Hough space
+	float[] maxValue;
+
 	// history of the encountered spikes to remove the least recent one from
 	// hough space
 	Coordinate[] eventHistory;
@@ -58,12 +64,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	private boolean logDataEnabled = false;
         private float   decay          = getPrefs().getFloat("Hough.CircleTracker.decay", 1.0f);
         private int     nrMax          = getPrefs().getInt("Hough.CircleTracker.nrMax", 4);
-
-        // the running maximum in Hough space
-	Coordinate[] maxCoordinate;
-
-        // the running value of the current maximum in Hough space
-	float[] maxValue;
+        private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
 
 
 	public boolean isGeneratingFilter() {
@@ -156,6 +157,16 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		initFilter();
 	}
 
+        public boolean getDecayMode(){
+            return decayMode;
+        }
+
+        synchronized public void setDecayMode(boolean decayMode){
+            getPrefs().putBoolean("HoughCircleTracker.decayMode",decayMode);
+            if(decayMode != this.decayMode) resetFilter();
+            this.decayMode = decayMode;
+        }
+
 	public float getRadius() {
 		return radius;
 	}
@@ -180,6 +191,11 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 
         synchronized public void setDecay(float decay){
             if(decay < 0) decay = 0;
+
+            if(decay != this.decay)
+            {
+                resetFilter();
+            }
 
             this.decay = decay;
             }
@@ -240,21 +256,21 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 
 		GL gl=drawable.getGL();
 
-		 //draw the Hough space
-//		for (int x = 0; x < cameraX; x++) {
-//			for (int y = 0; y < cameraY; y++) {
-//
-//				float red   = (float)accumulatorArray[x][y]/maxValue[0];
-//				float green = 1.0f - red;
-//
-//				gl.glColor4f(red,green,0.0f,.1f);
-//				gl.glRectf(
-//						(float)x-0.5f,
-//						(float)y-0.5f,
-//						(float)x+0.5f,
-//						(float)y+0.5f);
-//			}
-//		}
+		// draw the Hough space
+		for (int x = 0; x < cameraX; x++) {
+			for (int y = 0; y < cameraY; y++) {
+
+				float red   = (float)accumulatorArray[x][y]/maxValue[0];
+				float green = 1.0f - red;
+
+				gl.glColor4f(red,green,0.0f,.1f);
+				gl.glRectf(
+						(float)x-0.5f,
+						(float)y-0.5f,
+						(float)x+0.5f,
+						(float)y+0.5f);
+			}
+		}
 
 		// draw the circle
 		gl.glColor4f(0.0f,0.0f,1.0f,1.0f);
@@ -484,7 +500,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 
                         	maxValue[i] = accumulatorArray[x][y];
 
-        			if (maxValue[i] > threshold){
+        			if (maxValue[i] > threshold && maxCoordinate[i] != null){
                                             maxCoordinate[i].x = x;
                                             maxCoordinate[i].y = y;
                                     }
@@ -502,7 +518,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 			return in;
 
 
-                if(decay > 0)
+                if(decayMode == true)
                 {
                     float delta_t = in.getLastTimestamp() - timeStamp;
                     float decay_factor = 1.0f/(0.0001f * decay * delta_t);
@@ -517,10 +533,13 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
                 timeStamp = in.getLastTimestamp();
                 }
 
+
+                maxValue = new float[nrMax];
                 for(int i = 0; i<nrMax; i++)
                 {
                     if(maxCoordinate[i] == null)
                         maxCoordinate[i] = new Coordinate(0.0f,0.0f);
+                    
                 }
 
 
@@ -539,7 +558,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 			bufferIndex = (bufferIndex+1)%bufferLength;
 
 			// remove the least recent event from hough space
-			if(eventHistory[bufferIndex] != null && decay == 0)
+			if(eventHistory[bufferIndex] != null && decayMode == false)
 				accumulate(eventHistory[bufferIndex], -1);
 		}
                 for(int i = 0; i<nrMax; i++)
