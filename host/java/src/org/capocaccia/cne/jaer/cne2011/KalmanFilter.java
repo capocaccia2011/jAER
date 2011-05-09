@@ -9,7 +9,8 @@ package org.capocaccia.cne.jaer.cne2011;
  *
  * @author Eero
  */
-public class KalmanFilter {
+public class KalmanFilter extends EventFilter2D {
+
     /* Kalman filter parameters:*/
     protected double[][] At;
     protected double[][] AtT;
@@ -19,9 +20,7 @@ public class KalmanFilter {
 
     protected double[][] mu;
     protected double[][] Sigma;
-    protected double[][] muBel;
-    protected double[][] SigmaBel;
-    protected double dt;
+
     protected double[][] Kt;
     protected double sigma_epsilon;
     protected double sigma_delta;
@@ -29,7 +28,7 @@ public class KalmanFilter {
     protected double[][] Qt;
 
     //protected double[][] Rt;
-    //protected double[][] Qt;
+    protected double[][] Qt;
 
     /* Auxiliary matrices used for intermediate results:*/
     protected double[][] Mnn1; //n*n, i.e., the size of At
@@ -44,25 +43,91 @@ public class KalmanFilter {
     protected double[][] vk1; //k*1, i.e., the size of meas
     protected double[][] vk2; //k*1, i.e., the size of meas
 
+    // parameters
+    private double measurementSigma = getPrefs().getFloat("KalmanFilter.measurementSigma", 2.0);
 
-    public KalmanFilter(double[][] At_, double[][] Bt_, double[][] mu_, double[][] Sigma_, double dt_, double[][] Kt_){
-    At = At_;
-    Bt = Bt_;
-    Kt = Kt_;
-    mu = mu_;
-    Sigma = Sigma_;
-    dt = dt_;
+    public KalmanFilter() {
+        At = new double[6][6];
+        Bt = new double[6][2];
+        Kt = new double[6][2];
+        mu = new double[6];
+        Sigma = new double[6][6];
+
+        resetFilter();
+    }
+
+    public KalmanFilter(double[][] At, double[][] Bt, double[][] Ct, double[][] mu, double[][] Sigma){
+        this.At = At;
+        this.Bt = Bt;
+        this.Ct = Ct;
+        this.mu = mu;
+        this.Sigma = Sigma;
+
+        resetFilter();
     }
 
     public KalmanFilter(){}
 
-    public void updateMuBel(double[][] act){ //act is m*1 matrix
+    public double getMeasurementSigma() {
+        return measurementSigma;
+    }
+    synchronized public void setMeasurementSigma(double measurementSigma) {
+
+        if(measurementSigma < 0) measurementSigma = 0;
+        getPrefs().putFloat("KalmanFilter.measurementSigma", measurementSigma);
+
+        if(measurementSigma != this.measurementSigma) {
+            resetFilter();
+        }
+
+        this.measurementSigma = measurementSigma;
+    }
+
+    @Override
+    public void resetFilter() {
+
+        transposeMatrix(At, AtT);
+        transposeMatrix(Bt, BtT);
+        transposeMatrix(Ct, CtT);
+
+        Qt = new double[2][2];
+        Qt[0][0] = measurementSigma;
+        Qt[1][1] = measurementSigma;
+    }
+
+    @Override
+    public void initFilter() {
+        resetFilter();
+    }
+
+    @Override
+    public EventPacket<?> filterPacket(EventPacket<?> in) {
+
+        if (!isFilterEnabled())
+            return in;
+
+        if (in == null || in.getSize() == 0)
+            return in;
+
+        for (BasicEvent event : in) {
+
+            double[][] meas = new double[2][1];
+            meas[0][0] = event.x;
+            meas[1][0] = event.y;
+
+            correct(meas);
+        }
+
+        return in; // only handles control commands, no event processing
+    }
+
+    public void predictMu(double[][] act){ //act is m*1 matrix
         matrixMultiplication(At,mu,vn1);
         matrixMultiplication(Bt,act,vn2);
         matrixSum(vn1,vn2,muBel);
     }
 
-    public void updateSigmaBel(double[][] Rt){
+    public void predictSigma(double[][] Rt){
         matrixMultiplication(At, Sigma, Mnn1);
         matrixMultiplication(Mnn1,AtT,Mnn2);
         matrixSum(Mnn2,Rt,SigmaBel);
@@ -76,25 +141,36 @@ public class KalmanFilter {
         matrixMultiplication(Mnk1,Mkk1,Kt);
     }
 
-    public void updateMu(double[][] meas){ //meas is k*1 matrix
+    public void correctMu(double[][] meas){ //meas is k*1 matrix
         matrixMultiplication(Ct,muBel,vk1);
         matrixSubstraction(meas,vk1,vk2);
         matrixMultiplication(Kt,vk2,vn1);
         matrixSum(muBel,vn1,mu);
     }
 
-    public void updateSigma(){
+    public void correctSigma(){
         matrixMultiplication(Kt,Ct,Mnn1);
         matrixMultiplication(Mnn1,SigmaBel,Mnn2);
         matrixSubstraction(SigmaBel,Mnn2,Sigma);
     }
 
-    public void updateFilter(double[][] act, double[][] meas, double[][] Rt, double[][] Qt){
-        updateMuBel(act);
-        updateSigmaBel(Rt);
+    public void updateFilter(double[][] act, double[][] meas, double dt, double[][] Rt, double[][] Qt){
+
+        // TODO: compute Rt from dt
+        predict(act, Rt, dt);
+        update(meas, Qt);
+    }
+
+    public void predict(double[][] act, double[][] Rt, double dt) {
+
+        predictMu(act);
+        predictSigma(Rt);
+    }
+
+    public void correct(double[][] meas) {
         updateKalmanGain(Qt);
-        updateMu(meas);
-        updateSigma();
+        correctMu(meas);
+        correctSigma();
     }
 
     public void updateAt(double dt){  /** Assuming At is initialized as double[6][6] */
