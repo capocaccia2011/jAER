@@ -59,12 +59,12 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	DrawPanel             gazePanel;
 
 	// parameters
-	private float   radius         = getPrefs().getFloat("HoughCircleTracker.radius", 12.5f);
-	private int     bufferLength   = getPrefs().getInt("HoughCircleTracker.bufferLength", 200);
-	private int     threshold      = getPrefs().getInt("HoughCircleTracker.threshold", 30);
+	private float   radius         = getPrefs().getFloat("HoughCircleTracker.radius", 0.8f);
+	private int     bufferLength   = getPrefs().getInt("HoughCircleTracker.bufferLength", 4000);
+	private int     threshold      = getPrefs().getInt("HoughCircleTracker.threshold", 15);
 	private boolean logDataEnabled = false;
         private float   decay          = getPrefs().getFloat("HoughCircleTracker.decay", 1.0f);
-        private int     nrMax          = getPrefs().getInt("HoughCircleTracker.nrMax", 4);
+        private int     nrMax          = getPrefs().getInt("HoughCircleTracker.nrMax", 1);
         private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
         private boolean drawHough      = getPrefs().getBoolean("HoughCircleTracker.drawHough", false);
         private boolean locDepression  = getPrefs().getBoolean("HoughCirclreTracker.locDepression", true);
