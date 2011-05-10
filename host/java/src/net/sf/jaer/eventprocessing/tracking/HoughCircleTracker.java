@@ -67,6 +67,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
         private int     nrMax          = getPrefs().getInt("HoughCircleTracker.nrMax", 4);
         private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
         private boolean drawHough      = getPrefs().getBoolean("HoughCircleTracker.drawHough", false);
+        private boolean locDepression  = getPrefs().getBoolean("HoughCirclreTracker.locDepression", true);
 
 
 	public boolean isGeneratingFilter() {
@@ -158,6 +159,16 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		if(!isFilterEnabled()) return;
 		initFilter();
 	}
+
+        public boolean getLocDepression(){
+            return locDepression;
+        }
+
+        synchronized public void setLocDepression(boolean locDepression){
+            getPrefs().putBoolean("HoughCircleTracker.locDepression",locDepression);
+            if(locDepression != this.locDepression) resetFilter();
+            this.locDepression = locDepression;
+        }
 
         public boolean getDecayMode(){
             return decayMode;
@@ -481,21 +492,21 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
           if (x-locMaxRad < 0 || x+locMaxRad > chip.getSizeX()-1
                   || y-locMaxRad < 0 || y+locMaxRad > chip.getSizeY()-1)
 			return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x][y+i])
+          if(accumulatorArray[x][y]<accumulatorArray[x][y+1])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x][y-i])
+          if(accumulatorArray[x][y]<accumulatorArray[x][y-1])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x+i][y])
+          if(accumulatorArray[x][y]<accumulatorArray[x+1][y])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x-i][y])
+          if(accumulatorArray[x][y]<accumulatorArray[x-1][y])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x+i][y-i])
+          if(accumulatorArray[x][y]<accumulatorArray[x+1][y-1])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x-i][y+i])
+          if(accumulatorArray[x][y]<accumulatorArray[x-1][y+1])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x+i][y+i])
+          if(accumulatorArray[x][y]<accumulatorArray[x+1][y+1])
               return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x-i][y-i])
+          if(accumulatorArray[x][y]<accumulatorArray[x-1][y-1])
               return false;
           
           
@@ -610,7 +621,24 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
                 {
                     int x = (int)maxCoordinate[i].x;
                     int y = (int)maxCoordinate[i].y;
-                    accumulatorArray[x][y] *= 0.01f;
+
+                    if(locDepression == true)
+                    {
+                        if(x-1 > 0 && x+1 < chip.getSizeX()-1
+                            && y-1 > 0 && y+1 < chip.getSizeY()-1)
+                        {
+                        accumulatorArray[x][y] *= 0.01f;
+                        accumulatorArray[x][y+1] *= 0.1f;
+                        accumulatorArray[x][y-1] *= 0.1f;
+                        accumulatorArray[x+1][y] *= 0.1f;
+                        accumulatorArray[x-1][y] *= 0.1f;
+                        accumulatorArray[x+1][y+1] *= 0.1f;
+                        accumulatorArray[x-1][y+1] *= 0.1f;
+                        accumulatorArray[x-1][y-1] *= 0.1f;
+                        accumulatorArray[x-1][y-1] *= 0.1f;
+                        }
+
+                    }
 		
                     BasicEvent outEvent = itr.nextOutput();
                     outEvent.x = (short)maxCoordinate[i].x;
