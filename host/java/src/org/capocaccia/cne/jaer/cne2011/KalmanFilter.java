@@ -57,6 +57,9 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     // parameters
     private double measurementSigma = getPrefs().getDouble("KalmanFilter.measurementSigma", 2.0);
     private double processSigma = getPrefs().getDouble("KalmanFilter.processSigma", 10.0);
+    private double measurementThreshold = getPrefs().getDouble("KalmanFilter.measurementThreshold", 1.0);
+
+    private boolean annotationEnabled = true;
 
     public KalmanFilter(AEChip chip) {
 
@@ -90,10 +93,10 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         resetFilter();
     }
 
-    public double getMeasurementSigma() {
-        return measurementSigma;
+    public float getMeasurementSigma() {
+        return (float)measurementSigma;
     }
-    synchronized public void setMeasurementSigma(double measurementSigma) {
+    synchronized public void setMeasurementSigma(float measurementSigma) {
 
         if(measurementSigma < 0) measurementSigma = 0;
         getPrefs().putDouble("KalmanFilter.measurementSigma", measurementSigma);
@@ -104,16 +107,30 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         }
     }
 
-    public double setProcessSigma() {
-        return processSigma;
+    public float getProcessSigma() {
+        return (float)processSigma;
     }
-    synchronized public void setProcessSigma(double processSigma) {
+    synchronized public void setProcessSigma(float processSigma) {
 
         if(processSigma < 0) processSigma = 0;
         getPrefs().putDouble("KalmanFilter.processSigma", processSigma);
 
         if(processSigma != this.processSigma) {
             this.processSigma = processSigma;
+            resetFilter();
+        }
+    }
+
+    public float getMeasurementThreshold() {
+        return (float)measurementThreshold;
+    }
+    synchronized public void setMeasurementThreshold(float measurementThreshold) {
+
+        if(measurementThreshold < 0) measurementThreshold = 0;
+        getPrefs().putDouble("KalmanFilter.measurementThreshold", measurementThreshold);
+
+        if(measurementThreshold != this.measurementThreshold) {
+            this.measurementThreshold = measurementThreshold;
             resetFilter();
         }
     }
@@ -156,19 +173,37 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         if (t < 0)
             t = in.getFirstTimestamp();
 
+
+        double[][] bestMeas = new double[2][1];
+        double[][] meas     = new double[2][1];
+        double minDistance = -1;
+        int timestamp = 0;
+
         for (BasicEvent event : in) {
 
-            double[][] meas = new double[2][1];
             meas[0][0] = event.x;
             meas[1][0] = event.y;
+
+            double distance = (mu[0][0]-meas[0][0])*(mu[0][0]-meas[0][0]) +
+                              (mu[1][0]-meas[1][0])*(mu[1][0]-meas[1][0]);
+
+            if (distance < minDistance || minDistance < 0) {
+                minDistance = distance;
+                bestMeas[0][0] = meas[0][0];
+                bestMeas[1][0] = meas[1][0];
+                timestamp = event.timestamp;
+            }
+        }
+
+        if (minDistance <= measurementThreshold) {
 
             // TODO: get the performed actions from the controller
             double[][] act = new double[2][1];
 
-            double dt = (double)(event.timestamp - t)/100.0;
-            t = event.timestamp;
+            double dt = (double)(timestamp - t)/1000.0;
+            t = timestamp;
 
-            updateFilter(act, meas, dt);
+            updateFilter(act, bestMeas, dt);
         }
 
         return in;
@@ -494,13 +529,13 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     }
     
     @Override
-    public void setAnnotationEnabled(boolean yes) {
-        throw new UnsupportedOperationException("Not supported yet.");
+    public void setAnnotationEnabled(boolean annotationEnabled) {
+        this.annotationEnabled = annotationEnabled;
     }
 
     @Override
     public boolean isAnnotationEnabled() {
-        throw new UnsupportedOperationException("Not supported yet.");
+        return annotationEnabled;
     }
 
     @Override
@@ -509,13 +544,16 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         if(!isFilterEnabled())
             return;
 
+        if (!annotationEnabled)
+            return;
+
         GL gl=drawable.getGL();
 
         gl.glColor3f(1,1,0);
         gl.glLineWidth(2);
 
         int no_points_ellipse = 12;
-        double ellipse_radius = 4;
+        double ellipse_radius = 0.0001;
 
 
         auxmatr[0][0] = Sigma[0][0];
@@ -531,29 +569,22 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
             gl.glVertex2d(
                     mu[0][0] + ellipse_radius*auxvec2[0][0],
-                    mu[1][0] + ellipse_radius*auxvec2[0][1]);
+                    mu[1][0] + ellipse_radius*auxvec2[1][0]);
         }
         gl.glEnd();
 
         double velx = mu[2][0];
         double vely = mu[3][0];
 
-        double speed = Math.sqrt(velx*velx+vely*vely);
-        double direction = Math.atan(vely/velx);
-
-
         gl.glColor3f(1,0,0);
         gl.glLineWidth(4);
 
         gl.glBegin(GL.GL_LINE_LOOP);
         gl.glVertex2d(mu[0][0],mu[1][0]);
-        gl.glVertex2d(mu[0][0] + speed*Math.cos(direction),
-                      mu[1][0] + speed*Math.sin(direction));
+        gl.glVertex2d(mu[0][0] + velx*100,
+                      mu[1][0] + vely*100);
 
         gl.glEnd();
-
-
-
     }
 
     public Point2D.Float getBallPosition() {
@@ -577,9 +608,9 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         return position;
     }
 
-    public void setBallPosition(Point2D.Float position) {
-        initFilter();
-        mu[0][0] = position.getX();
-        mu[1][0] = position.getY();
-    }
+//    public void setBallPosition(Point2D.Float position) {
+//        initFilter();
+//        mu[0][0] = position.getX();
+//        mu[1][0] = position.getY();
+//    }
 }
