@@ -15,13 +15,13 @@ import java.util.*;
 import net.sf.jaer.eventprocessing.EventFilterDataLogger;
 
 import net.sf.jaer.graphics.FrameAnnotater;
-import java.awt.Graphics2D;
 import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
 import java.awt.*;
 import java.awt.event.*;
 
 import javax.swing.*;
+import org.capocaccia.cne.jaer.cne2011.WeightedEvent;
 
 /**
  * A simple circle tracker based on a hough transform.
@@ -34,13 +34,13 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	int cameraY;
 	float[][] accumulatorArray;
 
-        //for decay in Hough space
-        float timeStamp = 0;
+	//for decay in Hough space
+	float timeStamp = 0;
 
-        // the running maxima in Hough space
+	// the running maxima in Hough space
 	Coordinate[] maxCoordinate;
 
-        // the running values of the current maximum in Hough space
+	// the running values of the current maximum in Hough space
 	float[] maxValue;
 
 	// history of the encountered spikes to remove the least recent one from
@@ -55,19 +55,19 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	Coordinate[] circleOutline = new Coordinate[angleListLength];
 
 	EventFilterDataLogger dataLogger;
-	JFrame                targetFrame;
-	DrawPanel             gazePanel;
+	JFrame targetFrame;
+	DrawPanel gazePanel;
 
 	// parameters
-	private float   radius         = getPrefs().getFloat("HoughCircleTracker.radius", 0.8f);
+	private float   radius	 = getPrefs().getFloat("HoughCircleTracker.radius", 0.8f);
 	private int     bufferLength   = getPrefs().getInt("HoughCircleTracker.bufferLength", 4000);
 	private int     threshold      = getPrefs().getInt("HoughCircleTracker.threshold", 15);
 	private boolean logDataEnabled = false;
-        private float   decay          = getPrefs().getFloat("HoughCircleTracker.decay", 1.0f);
-        private int     nrMax          = getPrefs().getInt("HoughCircleTracker.nrMax", 1);
-        private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
-        private boolean drawHough      = getPrefs().getBoolean("HoughCircleTracker.drawHough", false);
-        private boolean locDepression  = getPrefs().getBoolean("HoughCirclreTracker.locDepression", true);
+	private float   decay	  = getPrefs().getFloat("HoughCircleTracker.decay", 1.0f);
+	private int     nrMax	  = getPrefs().getInt("HoughCircleTracker.nrMax", 1);
+	private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
+	private boolean drawHough      = getPrefs().getBoolean("HoughCircleTracker.drawHough", false);
+	private boolean locDepression  = getPrefs().getBoolean("HoughCirclreTracker.locDepression", true);
 
 
 	public boolean isGeneratingFilter() {
@@ -84,6 +84,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		return null;
 	}
 
+	@Override
 	public void resetFilter() {
 		initTracker();
 	}
@@ -132,17 +133,17 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 			eventHistory[i] = null;
 
 		bufferIndex = 0;
-                maxValue = new float[nrMax];
-                maxCoordinate = new Coordinate[nrMax];
-                for(int i = 0; i<nrMax; i++)
-                {
-                    maxCoordinate[i] = null;
-                }
-                for (int i = 0; i<nrMax; i++)
-                {
-                    maxValue[i] = 0;
+		maxValue = new float[nrMax];
+		maxCoordinate = new Coordinate[nrMax];
+		for(int i = 0; i<nrMax; i++)
+		{
+			maxCoordinate[i] = null;
+		}
+		for (int i = 0; i<nrMax; i++)
+		{
+			maxValue[i] = 0;
 
-                }
+		}
 
 		for (int i = 0;i<angleListLength;i++){
 			sinTau[i] = (float)(Math.sin(2*Math.PI/angleListLength*i));
@@ -161,34 +162,34 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	}
 
         public boolean getLocDepression(){
-            return locDepression;
-        }
+	    return locDepression;
+	}
 
-        synchronized public void setLocDepression(boolean locDepression){
-            getPrefs().putBoolean("HoughCircleTracker.locDepression",locDepression);
-            if(locDepression != this.locDepression) resetFilter();
-            this.locDepression = locDepression;
-        }
+	synchronized public void setLocDepression(boolean locDepression){
+		getPrefs().putBoolean("HoughCircleTracker.locDepression",locDepression);
+		if(locDepression != this.locDepression) resetFilter();
+		this.locDepression = locDepression;
+	}
 
-        public boolean getDecayMode(){
-            return decayMode;
-        }
+	public boolean getDecayMode(){
+	    return decayMode;
+	}
 
-        synchronized public void setDecayMode(boolean decayMode){
-            getPrefs().putBoolean("HoughCircleTracker.decayMode",decayMode);
-            if(decayMode != this.decayMode) resetFilter();
-            this.decayMode = decayMode;
-        }
+	synchronized public void setDecayMode(boolean decayMode){
+		getPrefs().putBoolean("HoughCircleTracker.decayMode",decayMode);
+		if(decayMode != this.decayMode) resetFilter();
+		this.decayMode = decayMode;
+	}
 
-        public boolean getDrawHough(){
-            return drawHough;
-        }
+	public boolean getDrawHough(){
+		return drawHough;
+	}
 
-        synchronized public void setDrawHough(boolean drawHough){
-            getPrefs().putBoolean("HoughCircleTracker.drawHough",drawHough);
-            if(drawHough != this.drawHough) resetFilter();
-            this.drawHough = drawHough;
-        }
+	synchronized public void setDrawHough(boolean drawHough){
+		getPrefs().putBoolean("HoughCircleTracker.drawHough",drawHough);
+		if(drawHough != this.drawHough) resetFilter();
+		this.drawHough = drawHough;
+	}
 
 	public float getRadius() {
 		return radius;
@@ -207,35 +208,35 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		this.radius = radius;
 	}
 
-                public float getDecay() {
-            return decay;
-        }
+		public float getDecay() {
+		return decay;
+	}
 
 
-        synchronized public void setDecay(float decay){
-            if(decay < 0) decay = 0;
+	synchronized public void setDecay(float decay){
+		if(decay < 0) decay = 0;
 
-            if(decay != this.decay)
-            {
-                resetFilter();
-            }
+		if(decay != this.decay)
+		{
+		resetFilter();
+		}
 
-            this.decay = decay;
-            }
+		this.decay = decay;
+		}
 
 
-        public int getNrMax() {
-                return nrMax;
-        }
+	public int getNrMax() {
+		return nrMax;
+	}
 
-        synchronized public void setNrMax(int nrMax){
+	synchronized public void setNrMax(int nrMax){
 
-                if(nrMax < 0) nrMax = 0;
+		if(nrMax < 0) nrMax = 0;
 
-                this.nrMax = nrMax;
-                getPrefs().putInt("HoughCircleTracker.nrMax", nrMax);
-                resetFilter();
-        }
+		this.nrMax = nrMax;
+		getPrefs().putInt("HoughCircleTracker.nrMax", nrMax);
+		resetFilter();
+	}
 
 	public int getBufferLength() {
 		return bufferLength;
@@ -271,21 +272,21 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	public void annotate(Graphics2D g) {
 	}
 
-        @Override
+	@Override
 	public void annotate(GLAutoDrawable drawable) {
 
 		if(!isFilterEnabled())
 			return;
-                if(drawable == null)
-                    return;
-                if(accumulatorArray == null || maxValue == null || maxCoordinate == null)
-                    return;
+		if(drawable == null)
+			return;
+		if(accumulatorArray == null || maxValue == null || maxCoordinate == null)
+			return;
 
 		GL gl=drawable.getGL();
 
 		// draw the Hough space
-                if(drawHough == true)
-                {
+		if(drawHough == true)
+		{
 		for (int x = 0; x < cameraX; x++) {
 			for (int y = 0; y < cameraY; y++) {
 
@@ -300,37 +301,37 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 						(float)y+0.5f);
 			}
 		}
-                }
+		}
 
 		// draw the circle
 		gl.glColor4f(0.0f,0.0f,1.0f,1.0f);
 		gl.glLineWidth(4);
-                for(int j = 0; j<nrMax; j++)
-                {
-                    gl.glRectf((float)maxCoordinate[j].x-1.0f,(float)maxCoordinate[j].y-1.0f,
-                            (float)maxCoordinate[j].x+1.0f,(float)maxCoordinate[j].y+1.0f);
-//                    gl.glBegin(GL.GL_LINE_LOOP);
-//                    for (int i = 0;i<angleListLength;i++){
-//                        	gl.glVertex2d(
-//                                		circleOutline[i].x + maxCoordinate[j].x,
-//                                        	circleOutline[i].y + maxCoordinate[j].y);
-//                    }
-//                    gl.glEnd();
-                }
+		for(int j = 0; j<nrMax; j++)
+		{
+			gl.glRectf((float)maxCoordinate[j].x-1.0f,(float)maxCoordinate[j].y-1.0f,
+				(float)maxCoordinate[j].x+1.0f,(float)maxCoordinate[j].y+1.0f);
+//			gl.glBegin(GL.GL_LINE_LOOP);
+//			for (int i = 0;i<angleListLength;i++){
+//				gl.glVertex2d(
+//						circleOutline[i].x + maxCoordinate[j].x,
+//						circleOutline[i].y + maxCoordinate[j].y);
+//			}
+//			gl.glEnd();
+		}
 
 	}
 
 	// fast inclined ellipse drawing algorithm; ellipse eqn: A*x^2+B*y^2+C*x*y-1 = 0
 	// the algorithm is fast because it uses just integer addition and subtraction
-	void accumulate(Coordinate event, int weight){
+	void accumulate(Coordinate event, float weight){
 
 		// TODO: this is a little overhead here, since we only draw circles in
 		// Hough space (not ellipses)
 		int centerX = (int)event.x;
 		int centerY = (int)event.y;
-		int aa      = Math.round(radius*radius);
-		int bb      = aa;
-		int twoC    = 0;
+		int aa	  = Math.round(radius*radius);
+		int bb	  = aa;
+		int twoC	= 0;
 
 		int x = 0;
 		int y = Math.round((float)Math.sqrt(bb));
@@ -485,35 +486,35 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		}
 	}
 
-        boolean islocmax(int x, int y)
-        {
-          int locMaxRad = 1;
-          int i =1;
-          if (x-locMaxRad < 0 || x+locMaxRad > chip.getSizeX()-1
-                  || y-locMaxRad < 0 || y+locMaxRad > chip.getSizeY()-1)
+	boolean islocmax(int x, int y)
+	{
+	  int locMaxRad = 1;
+	  int i =1;
+	  if (x-locMaxRad < 0 || x+locMaxRad > chip.getSizeX()-1
+		  || y-locMaxRad < 0 || y+locMaxRad > chip.getSizeY()-1)
 			return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x][y+1])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x][y-1])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x+1][y])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x-1][y])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x+1][y-1])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x-1][y+1])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x+1][y+1])
-              return false;
-          if(accumulatorArray[x][y]<accumulatorArray[x-1][y-1])
-              return false;
-          
-          
-          return true;
+	  if(accumulatorArray[x][y]<accumulatorArray[x][y+1])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x][y-1])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x+1][y])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x-1][y])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x+1][y-1])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x-1][y+1])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x+1][y+1])
+	      return false;
+	  if(accumulatorArray[x][y]<accumulatorArray[x-1][y-1])
+	      return false;
+	  
+	  
+	  return true;
 
 
-        }
+	}
 
 	void increaseHoughPoint(int x, int y, int weight) {
 
@@ -524,20 +525,20 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		accumulatorArray[x][y] = accumulatorArray[x][y] + weight;
 
 		// check if this is a new maximum
-                for(int i=0; i<nrMax; i++)
-                {
-                    if (accumulatorArray[x][y] >= maxValue[i]) {
+		for(int i=0; i<nrMax; i++)
+		{
+			if (accumulatorArray[x][y] >= maxValue[i]) {
 
-                        	maxValue[i] = accumulatorArray[x][y];
+				maxValue[i] = accumulatorArray[x][y];
 
-        			if (maxValue[i] > threshold && maxCoordinate[i] != null){
-                                            maxCoordinate[i].x = x;
-                                            maxCoordinate[i].y = y;
-                                    }
-                    i += nrMax;
-                    }
-                }
-    }
+				if (maxValue[i] > threshold && maxCoordinate[i] != null){
+						maxCoordinate[i].x = x;
+						maxCoordinate[i].y = y;
+					}
+			i += nrMax;
+			}
+		}
+	}
 
 	synchronized public EventPacket<?> filterPacket(EventPacket<?> in) {
 
@@ -545,35 +546,42 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 			return in;
 
 
-                if (in == null || in.getSize() == 0)
-                    return in;
+		if (in == null || in.getSize() == 0)
+			return in;
 
-                if(decayMode == true)
-                {
-                    float delta_t = in.getLastTimestamp() - timeStamp;
-                    float decay_factor = 1.0f/(0.0001f * decay * delta_t);
+		if(decayMode == true) {
+			float delta_t = in.getLastTimestamp() - timeStamp;
+			float decay_factor = 1.0f/(0.0001f * decay * delta_t);
 
-                    //for an exponentially decaying hough-space-weight.
-                    for (int x = 0; x < cameraX; x++) {
-			for (int y = 0; y < cameraY; y++) {
-                            accumulatorArray[x][y] *= decay_factor;
+			//for an exponentially decaying hough-space-weight.
+			for (int x = 0; x < cameraX; x++) {
+				for (int y = 0; y < cameraY; y++) {
+					accumulatorArray[x][y] *= decay_factor;
 
+				}
 			}
-                    }
-                timeStamp = in.getLastTimestamp();
-                }
+			timeStamp = in.getLastTimestamp();
+		}
 
 
-                maxValue = new float[nrMax];
-                for(int i = 0; i<nrMax; i++)
-                {
-                    if(maxCoordinate[i] == null)
-                        maxCoordinate[i] = new Coordinate(0.0f,0.0f);
-                    
-                }
-
+		maxValue = new float[nrMax];
+		for(int i = 0; i<nrMax; i++)
+		{
+			if(maxCoordinate[i] == null)
+			maxCoordinate[i] = new Coordinate(0.0f,0.0f);
+			
+		}
 
 		for (BasicEvent event : in) {
+
+			float weight;
+
+			try {
+				WeightedEvent weightedEvent = (WeightedEvent)event;
+				weight = weightedEvent.weight;
+			} catch (ClassCastException e) {
+				weight = 1.0f;
+			}
 
 			if (event.x < 0 || event.x > chip.getSizeX() - 1 || event.y < 0 || event.y > chip.getSizeY() - 1)
 				continue;
@@ -582,7 +590,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 			eventHistory[bufferIndex] = new Coordinate(event.x, event.y);
 
 			// accumulate all possible circle centers for the current event
-			accumulate(eventHistory[bufferIndex], 1);
+			accumulate(eventHistory[bufferIndex], weight);
 
 			// increase buffer index
 			bufferIndex = (bufferIndex+1)%bufferLength;
@@ -591,61 +599,61 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 			if(eventHistory[bufferIndex] != null && decayMode == false)
 				accumulate(eventHistory[bufferIndex], -1);
 		}
-                for(int i = 0; i<nrMax; i++)
-                {
-                    maxValue[i] = 0;
-                }
+		for(int i = 0; i<nrMax; i++)
+		{
+			maxValue[i] = 0;
+		}
 		for (int x = 0; x < cameraX; x++) {
 			for (int y = 0; y < cameraY; y++) {
 
-                             for(int i=0; i<nrMax; i++)
-                             {
-                                if (accumulatorArray[x][y] >= maxValue[i]
-                                        && islocmax(x,y)) {
+				 for(int i=0; i<nrMax; i++)
+				 {
+				if (accumulatorArray[x][y] >= maxValue[i]
+					&& islocmax(x,y)) {
 
-                                    maxValue[i] = accumulatorArray[x][y];
+					maxValue[i] = accumulatorArray[x][y];
 
-                                    if (maxValue[i] > threshold){
-                                            maxCoordinate[i].x = x;
-                                            maxCoordinate[i].y = y;
-                                    }
-                                    i += nrMax;
-                                }
-                              }
-                        }
+					if (maxValue[i] > threshold){
+						maxCoordinate[i].x = x;
+						maxCoordinate[i].y = y;
+					}
+					i += nrMax;
+				}
+				  }
+			}
 		
 	        }
 
-                OutputEventIterator itr = out.outputIterator();
-                for(int i = 0; i<nrMax; i++)
-                {
-                    int x = (int)maxCoordinate[i].x;
-                    int y = (int)maxCoordinate[i].y;
+		OutputEventIterator itr = out.outputIterator();
+		for(int i = 0; i<nrMax; i++)
+		{
+		    int x = (int)maxCoordinate[i].x;
+		    int y = (int)maxCoordinate[i].y;
 
-                    if(locDepression == true)
-                    {
-                        if(x-1 > 0 && x+1 < chip.getSizeX()-1
-                            && y-1 > 0 && y+1 < chip.getSizeY()-1)
-                        {
-                        accumulatorArray[x][y] *= 0.01f;
-                        accumulatorArray[x][y+1] *= 0.1f;
-                        accumulatorArray[x][y-1] *= 0.1f;
-                        accumulatorArray[x+1][y] *= 0.1f;
-                        accumulatorArray[x-1][y] *= 0.1f;
-                        accumulatorArray[x+1][y+1] *= 0.1f;
-                        accumulatorArray[x-1][y+1] *= 0.1f;
-                        accumulatorArray[x-1][y-1] *= 0.1f;
-                        accumulatorArray[x-1][y-1] *= 0.1f;
-                        }
+		    if(locDepression == true)
+		    {
+			if(x-1 > 0 && x+1 < chip.getSizeX()-1
+			    && y-1 > 0 && y+1 < chip.getSizeY()-1)
+			{
+			accumulatorArray[x][y] *= 0.01f;
+			accumulatorArray[x][y+1] *= 0.1f;
+			accumulatorArray[x][y-1] *= 0.1f;
+			accumulatorArray[x+1][y] *= 0.1f;
+			accumulatorArray[x-1][y] *= 0.1f;
+			accumulatorArray[x+1][y+1] *= 0.1f;
+			accumulatorArray[x-1][y+1] *= 0.1f;
+			accumulatorArray[x-1][y-1] *= 0.1f;
+			accumulatorArray[x-1][y-1] *= 0.1f;
+			}
 
-                    }
+		    }
 		
-                    BasicEvent outEvent = itr.nextOutput();
-                    outEvent.x = (short)maxCoordinate[i].x;
-                    outEvent.y = (short)maxCoordinate[i].y;
-                    outEvent.timestamp = (int) timeStamp;
-                //this timestamp is only on packet resolution!
-                }
+			BasicEvent outEvent = itr.nextOutput();
+			outEvent.x = (short)maxCoordinate[i].x;
+			outEvent.y = (short)maxCoordinate[i].y;
+			outEvent.timestamp = (int) timeStamp;
+		//this timestamp is only on packet resolution!
+		}
 		// pass events unchanged to next filter
 		return out;
 	}

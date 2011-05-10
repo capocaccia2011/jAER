@@ -100,12 +100,10 @@ public class DepressionMap extends EventFilter2D implements FrameAnnotater {
 
 			} else {
 
-				WeightedEvent outEvent = new WeightedEvent();
-                                ((WeightedEvent)itr.nextOutput()).copyFrom(outEvent);
-				outEvent.x = (short)event.x;
-				outEvent.y = (short)event.y;
-				outEvent.timestamp = (int) event.timestamp;
-				outEvent.weight = (float)map[outEvent.x][outEvent.y];
+				WeightedEvent outEvent = (WeightedEvent)itr.nextOutput();
+                                outEvent.copyFrom(event);
+                                outEvent.polarity = ((PolarityEvent)event).polarity;
+                                outEvent.weight = (float)map[event.x][event.y];
 			}
 		}
 
