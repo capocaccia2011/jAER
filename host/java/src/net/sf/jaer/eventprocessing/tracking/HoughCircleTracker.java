@@ -516,7 +516,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 
 	}
 
-	void increaseHoughPoint(int x, int y, int weight) {
+	void increaseHoughPoint(int x, int y, float weight) {
 
 		if (x < 0 || x > chip.getSizeX() - 1 || y < 0 || y > chip.getSizeY() - 1)
 			return;
