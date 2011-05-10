@@ -17,6 +17,7 @@ public class WeightedEvent extends PolarityEvent {
 
     /** Creates a new instance of WeightedEvent */
     public WeightedEvent() {
+        super();
     }
 
     public float getWeight(){
@@ -39,8 +40,6 @@ public class WeightedEvent extends PolarityEvent {
      @param src the event to copy from
      */
     @Override public void copyFrom(BasicEvent src){
-        WeightedEvent e=(WeightedEvent)src;
-        super.copyFrom(e);
-        this.weight=e.weight;
+        super.copyFrom(src);
     }
 }
