@@ -148,8 +148,11 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
             for ( int j = 0; j < 6; ++j )
                 Sigma[i][j] = 0;
 
-            Sigma[i][i] = 0.1; // TODO   THIS IS ONLY FOR TESTING 
+//            Sigma[i][i] = 0.0; // TODO   THIS IS ONLY FOR TESTING
         }
+
+        mu[0][0] = 64;
+        mu[1][0] = 64;
 
         Ct[0][0] = 1;
         Ct[1][1] = 1;
@@ -180,7 +183,6 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         int timestamp = t;
 
         for (BasicEvent event : in) {
-
             meas[0][0] = event.x;
             meas[1][0] = event.y;
 
@@ -197,7 +199,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
         // TODO: get the performed actions from the controller
         double[][] act = new double[2][1];
-        double dt = (double)(timestamp - t)/1000.0;
+        double dt = (double)(timestamp - t)/1000000.0;
         t = timestamp;
 
         predict(act, dt);
@@ -207,6 +209,19 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         }
 
         return in;
+    }
+    
+    protected void mahalanobis( double[][] meas )
+    {
+        matrixMultiplication(Sigma, CtT, Mnk1);
+        matrixMultiplication(Ct,Mnk1,Mkk1);
+        matrixSum(Mkk1,Qt,Mkk2);
+        invert2by2Matrix(Mkk2,Mkk1); //assuming M2 is a 2*2 matrix
+        // Mkk2 = S^{-1}  --  inverse innovation covariance
+        matrixMultiplication(Ct,mu,vk1);
+        matrixSubstraction(meas,vk1,vk2);
+        // vk2 = nu
+        // mahalanobis = nuT * S^{-1} * nu
     }
 
     protected void predictMu(double[][] act){ //act is m*1 matrix
@@ -255,7 +270,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         updateBt(dt);
         updateRt(dt);
         // checkRtComputation();
-    	// System.out.println("At = \n" + matrixToString( At ) );
+  	// System.out.println("At = \n" + matrixToString( At ) );
     	// System.out.println("AtT = \n" + matrixToString( AtT ) );
     	// System.out.println("Bt = \n" + matrixToString( Bt ) );
     	// System.out.println("Rt = \n" + matrixToString( Rt ) );
@@ -553,25 +568,28 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         gl.glLineWidth(2);
 
         int no_points_ellipse = 12;
-        double ellipse_radius = 0.0001;
+        double nsigmas = 3;
 
+        double a = Sigma[0][0];
+        double b = Sigma[1][0];
+        double c = Sigma[1][1];
+        double d = Math.sqrt( a*a + 4*b*b - 2*a*c + c*c );
+        double scale1 = Math.sqrt( 0.5 * ( a+c+d ) ) * nsigmas;
+        double scale2 = Math.sqrt( 0.5 * ( a+c-d ) ) * nsigmas;
+        double theta = 0.5 * Math.atan2( (2*b), (a-c) ) * 180.0 / Math.PI;
 
-        auxmatr[0][0] = Sigma[0][0];
-        auxmatr[0][1] = Sigma[0][1];
-        auxmatr[1][0] = Sigma[1][0];
-        auxmatr[1][1] = Sigma[1][1];
-
+        gl.glPushMatrix();
+        gl.glTranslated(mu[0][0], mu[1][0], 0);
+        gl.glRotated(theta, 0, 0, 1);
+        gl.glScaled(scale1, scale2, 1);
         gl.glBegin(GL.GL_LINE_LOOP);
         for (int i = 0;i<no_points_ellipse;i++){
-            auxvec1[0][0] = Math.cos(2*Math.PI*i/no_points_ellipse);
-            auxvec1[1][0] = Math.sin(2*Math.PI*i/no_points_ellipse);
-            matrixMultiplication(auxmatr,auxvec1,auxvec2);
-
-            gl.glVertex2d(
-                    mu[0][0] + ellipse_radius*auxvec2[0][0],
-                    mu[1][0] + ellipse_radius*auxvec2[1][0]);
+            double cc = Math.cos(2*Math.PI*i/(double)no_points_ellipse);
+            double ss = Math.sin(2*Math.PI*i/(double)no_points_ellipse);
+            gl.glVertex2d(cc,ss);
         }
         gl.glEnd();
+        gl.glPopMatrix();
 
         double velx = mu[2][0];
         double vely = mu[3][0];
@@ -579,11 +597,18 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         gl.glColor3f(1,0,0);
         gl.glLineWidth(4);
 
-        gl.glBegin(GL.GL_LINE_LOOP);
-        gl.glVertex2d(mu[0][0],mu[1][0]);
-        gl.glVertex2d(mu[0][0] + velx*100,
-                      mu[1][0] + vely*100);
+        gl.glPushMatrix();
+        gl.glTranslated(mu[0][0], mu[1][0], 0);
+        gl.glBegin(GL.GL_LINES);
+        gl.glVertex2d(0, 0);
+        gl.glVertex2d(velx, vely);
+        gl.glEnd();
+        gl.glPopMatrix();
 
+        gl.glColor3f(1,1,1);
+        gl.glBegin(GL.GL_LINES);
+        gl.glVertex2d(64, 64);
+        gl.glVertex2d(mu[0][0], mu[1][0]);
         gl.glEnd();
     }
 
