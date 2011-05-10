@@ -177,7 +177,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         double[][] bestMeas = new double[2][1];
         double[][] meas     = new double[2][1];
         double minDistance = -1;
-        int timestamp = 0;
+        int timestamp = t;
 
         for (BasicEvent event : in) {
 
@@ -195,15 +195,15 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
             }
         }
 
+        // TODO: get the performed actions from the controller
+        double[][] act = new double[2][1];
+        double dt = (double)(timestamp - t)/1000.0;
+        t = timestamp;
+
+        predict(act, dt);
+        
         if (minDistance <= measurementThreshold) {
-
-            // TODO: get the performed actions from the controller
-            double[][] act = new double[2][1];
-
-            double dt = (double)(timestamp - t)/1000.0;
-            t = timestamp;
-
-            updateFilter(act, bestMeas, dt);
+            correct(bestMeas);
         }
 
         return in;
