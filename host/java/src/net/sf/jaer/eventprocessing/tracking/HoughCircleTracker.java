@@ -3,6 +3,7 @@
  *
  * Created May 07 2011 by Jan Funke
  * inspired by HoughEyeTracker.java
+ * extended by Lorenz Muller
  */
 
 package net.sf.jaer.eventprocessing.tracking;
@@ -31,7 +32,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	// the Hough space
 	int cameraX;
 	int cameraY;
-	int[][] accumulatorArray;
+	float[][] accumulatorArray;
 
         //for decay in Hough space
         float timeStamp = 0;
@@ -62,8 +63,8 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	private int     bufferLength   = getPrefs().getInt("HoughCircleTracker.bufferLength", 200);
 	private int     threshold      = getPrefs().getInt("HoughCircleTracker.threshold", 30);
 	private boolean logDataEnabled = false;
-        private float   decay          = getPrefs().getFloat("Hough.CircleTracker.decay", 1.0f);
-        private int     nrMax          = getPrefs().getInt("Hough.CircleTracker.nrMax", 4);
+        private float   decay          = getPrefs().getFloat("HoughCircleTracker.decay", 1.0f);
+        private int     nrMax          = getPrefs().getInt("HoughCircleTracker.nrMax", 4);
         private boolean decayMode      = getPrefs().getBoolean("HoughCricleTracker.decayMode", true);
         private boolean drawHough      = getPrefs().getBoolean("HoughCircleTracker.drawHough", false);
 
@@ -110,7 +111,7 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 
 		System.out.println("HoughCircleTracker initialising...");
 
-		accumulatorArray = new int[chip.getSizeX()][chip.getSizeY()];
+		accumulatorArray = new float[chip.getSizeX()][chip.getSizeY()];
 
 		if(chip.getSizeX()==0 || chip.getSizeY()==0){
 			return;
@@ -265,6 +266,8 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		if(!isFilterEnabled())
 			return;
                 if(drawable == null)
+                    return;
+                if(accumulatorArray == null || maxValue == null || maxCoordinate == null)
                     return;
 
 		GL gl=drawable.getGL();
@@ -530,20 +533,20 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		if (!isFilterEnabled())
 			return in;
 
-		if (in == null || in.getSize() == 0)
-			return in;
 
+                if (in == null || in.getSize() == 0)
+                    return in;
 
                 if(decayMode == true)
                 {
                     float delta_t = in.getLastTimestamp() - timeStamp;
                     float decay_factor = 1.0f/(0.0001f * decay * delta_t);
-                
+
                     //for an exponentially decaying hough-space-weight.
                     for (int x = 0; x < cameraX; x++) {
 			for (int y = 0; y < cameraY; y++) {
                             accumulatorArray[x][y] *= decay_factor;
-                                
+
 			}
                     }
                 timeStamp = in.getLastTimestamp();
@@ -602,14 +605,17 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 		
 	        }
 
-
+                OutputEventIterator itr = out.outputIterator();
                 for(int i = 0; i<nrMax; i++)
                 {
-		OutputEventIterator itr = out.outputIterator();
-		BasicEvent outEvent = itr.nextOutput();
-		outEvent.x = (short)maxCoordinate[i].x;
-		outEvent.y = (short)maxCoordinate[i].y;
-                outEvent.timestamp = (int) timeStamp;
+                    int x = (int)maxCoordinate[i].x;
+                    int y = (int)maxCoordinate[i].y;
+                    accumulatorArray[x][y] *= 0.01f;
+		
+                    BasicEvent outEvent = itr.nextOutput();
+                    outEvent.x = (short)maxCoordinate[i].x;
+                    outEvent.y = (short)maxCoordinate[i].y;
+                    outEvent.timestamp = (int) timeStamp;
                 //this timestamp is only on packet resolution!
                 }
 		// pass events unchanged to next filter
