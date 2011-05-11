@@ -6,6 +6,8 @@
 package ch.unizh.ini.jaer.projects.labyrinthkalman;
 
 import java.awt.geom.Point2D;
+import java.util.ArrayList;
+
 import net.sf.jaer.chip.AEChip;
 import net.sf.jaer.event.*;
 
@@ -24,7 +26,7 @@ import net.sf.jaer.graphics.FrameAnnotater;
 @Description("specialized Kalman filter for ball tracking in the labyrinth game")
 public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
 
-	private LabyrinthBallKalmanFilter kf;
+	private ArrayList< LabyrinthBallKalmanFilter > filters;
 	
     // the timestamp of the most recent received event
     private int t = -1;
@@ -44,10 +46,13 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
     public KalmanEventFilter(AEChip chip, LabyrinthBallController controller) {
         super(chip);
         this.controller=controller;
-        this.kf = new LabyrinthBallKalmanFilter();
-        setPropertyTooltip("processSigma","???"); // TODO
-        setPropertyTooltip("measurementThreshold","???");
-        setPropertyTooltip("measurementSigma","???");
+        
+        filters = new ArrayList< LabyrinthBallKalmanFilter >();
+        filters.add( new LabyrinthBallKalmanFilter() );
+
+        setPropertyTooltip("processSigma","standard deviation of acceleration noise [px/s^2]");
+        setPropertyTooltip("measurementThreshold","maximum mahalanobis distance to accept a measurement for update");
+        setPropertyTooltip("measurementSigma","standard deviation of measurement nois [px]");
 
         resetFilter();
     }
@@ -55,6 +60,7 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
     public float getMeasurementSigma() {
         return (float)measurementSigma;
     }
+
     synchronized public void setMeasurementSigma(float measurementSigma) {
 
         if(measurementSigma < 0) measurementSigma = 0;
@@ -97,9 +103,12 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
     @Override
     final public void resetFilter()
     {
-    	kf.setMeasurementSigma( measurementSigma );
-    	kf.setProcessSigma( processSigma );
-    	kf.resetFilter();
+    	for ( LabyrinthBallKalmanFilter filter : filters )
+    	{
+	       	filter.setMeasurementSigma( measurementSigma );
+	    	filter.setProcessSigma( processSigma );
+	    	filter.resetFilter();
+    	}
     }
 
     @Override
@@ -107,48 +116,68 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
         resetFilter();
     }
 
-    @Override
-    public EventPacket<?> filterPacket(EventPacket<?> in) {
+	@Override
+	public EventPacket< ? > filterPacket( EventPacket< ? > in )
+	{
+		if ( !isFilterEnabled() )
+			return in;
 
-        if (!isFilterEnabled())
-            return in;
+		if ( in == null || in.getSize() == 0 )
+			return in;
 
-        if (in == null || in.getSize() == 0)
-            return in;
+		// TODO: get the performed actions from the controller
+		final double[] act = new double[ 2 ];
 
-        // TODO: get the performed actions from the controller
-        final double[] act = new double[2];
-        
-    	int timestamp = in.getFirstTimestamp(); 
-        if (t >= 0) {
-            double dt = (double)(timestamp - t)/1000000.0;
-            kf.predict(act, dt);        	
-        }
-        t = timestamp;
+		// prediction for all filters
+		int timestamp = in.getFirstTimestamp();
+		if ( t >= 0 )
+		{
+			double dt = ( double ) ( timestamp - t ) / 1000000.0;
+			for ( LabyrinthBallKalmanFilter filter : filters )
+			{
+				filter.predict( act, dt );
+			}
+		}
+		t = timestamp;
 
-        final double[] bestMeas = new double[2];
-        final double[] meas     = new double[2];
-        double minDistance = Double.MAX_VALUE;
-        for (BasicEvent event : in) {
-            meas[0] = event.x;
-            meas[1] = event.y;
+		final double[] meas = new double[ 2 ];
+		for ( BasicEvent event : in )
+		{
+			meas[ 0 ] = event.x;
+			meas[ 1 ] = event.y;
+			double minDistance = Double.MAX_VALUE;
 
-            double distance = kf.mahalanobisToMeasurement(meas);
+			// find the filter that best matches this measurement
 
-            if (distance < minDistance) {
-                minDistance = distance;
-                bestMeas[0] = meas[0];
-                bestMeas[1] = meas[1];
-                // timestamp = event.timestamp;
-            }
-        }
+			LabyrinthBallKalmanFilter bestFilter = null;
+			for ( LabyrinthBallKalmanFilter filter : filters )
+			{
+				double distance = filter.mahalanobisToMeasurement( meas );
+				if ( distance < minDistance )
+				{
+					minDistance = distance;
+					bestFilter = filter;
+				}
+			}
+			if ( ( bestFilter != null ) && ( minDistance <= measurementThreshold ) )
+			{
+				bestFilter.correct( meas );
+			}
+			else
+			{
+				bestFilter = new LabyrinthBallKalmanFilter();
+				bestFilter.setMeasurementSigma( measurementSigma );
+				bestFilter.setProcessSigma( processSigma );
+				bestFilter.resetFilter();
+				bestFilter.getMu()[ 0 ] = meas[ 0 ];
+				bestFilter.getMu()[ 1 ] = meas[ 1 ];
+				filters.add( bestFilter );
+				System.out.println( filters.size() + " Kalman filters" );
+			}
+		}
 
-        if (minDistance <= measurementThreshold) {
-            kf.correct(bestMeas);
-        }
-
-        return in;
-    }
+		return in;
+	}
 
     @Override
     public void setAnnotationEnabled(boolean annotationEnabled) {
@@ -231,25 +260,30 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
         GL gl=drawable.getGL();
         Color3f covColor = new Color3f(1,1,0);
         Color3f speedColor = new Color3f(1,0,0);
-        paintKalmanFilterState( kf, gl, covColor, speedColor );
+        for ( LabyrinthBallKalmanFilter filter : filters )
+        	paintKalmanFilterState( filter, gl, covColor, speedColor );
     }
 
     public Point2D.Float getBallPosition() {
 
+    	LabyrinthBallKalmanFilter kf = filters.get(0);
         Point2D.Float position = new Point2D.Float();
         position.setLocation(kf.getMu()[0], kf.getMu()[1]);
         return position;
     }
 
     public double getBallPositionX() {
+    	LabyrinthBallKalmanFilter kf = filters.get(0);
         return kf.getMu()[0];
     }
 
     public double getBallPositionY() {
+    	LabyrinthBallKalmanFilter kf = filters.get(0);
         return kf.getMu()[1];
     }
     public Point2D.Float getBallVelocity() {
 
+    	LabyrinthBallKalmanFilter kf = filters.get(0);
         Point2D.Float position = new Point2D.Float();
         position.setLocation(kf.getMu()[2], kf.getMu()[3]);
         return position;
