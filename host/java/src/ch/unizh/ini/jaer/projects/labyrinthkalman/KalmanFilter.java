@@ -3,8 +3,9 @@
  * and open the template in the editor.
  */
 
-package org.capocaccia.cne.jaer.cne2011;
+package ch.unizh.ini.jaer.projects.labyrinthkalman;
 
+import ch.unizh.ini.jaer.projects.labyrinthkalman.LabyrinthBallController;
 import java.awt.geom.Point2D;
 import net.sf.jaer.chip.AEChip;
 import net.sf.jaer.event.*;
@@ -49,22 +50,17 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     private double[][] vk1; //k*1, i.e., the size of meas
     private double[][] vk2; //k*1, i.e., the size of meas
 
-    /*Auxiliary matrices used for annotating:*/
-    double[][] auxvec1 = new double[2][1];
-    double[][] auxmatr = new double[2][2];
-    double[][] auxvec2 = new double[2][1];
-
     // parameters
-    private double measurementSigma = getPrefs().getDouble("KalmanFilter.measurementSigma", 2.0);
-    private double processSigma = getPrefs().getDouble("KalmanFilter.processSigma", 10.0);
-    private double measurementThreshold = getPrefs().getDouble("KalmanFilter.measurementThreshold", 1.0);
+    private double measurementSigma = getDouble("measurementSigma", 3.0);
+    private double processSigma = getDouble("processSigma", 100.0);
+    private double measurementThreshold = getDouble("measurementThreshold", 3.0);
 
     private boolean annotationEnabled = true;
-
-    public KalmanFilter(AEChip chip) {
-
+    LabyrinthBallController controller;
+    
+    public KalmanFilter(AEChip chip, LabyrinthBallController controller) {
         super(chip);
-
+        this.controller=controller;
         At = new double[6][6];
         AtT = new double[6][6];
         Bt = new double[6][2];
@@ -99,7 +95,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     synchronized public void setMeasurementSigma(float measurementSigma) {
 
         if(measurementSigma < 0) measurementSigma = 0;
-        getPrefs().putDouble("KalmanFilter.measurementSigma", measurementSigma);
+        putDouble("measurementSigma", measurementSigma);
 
         if(measurementSigma != this.measurementSigma) {
             this.measurementSigma = measurementSigma;
@@ -113,7 +109,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     synchronized public void setProcessSigma(float processSigma) {
 
         if(processSigma < 0) processSigma = 0;
-        getPrefs().putDouble("KalmanFilter.processSigma", processSigma);
+        putDouble("processSigma", processSigma);
 
         if(processSigma != this.processSigma) {
             this.processSigma = processSigma;
@@ -127,7 +123,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     synchronized public void setMeasurementThreshold(float measurementThreshold) {
 
         if(measurementThreshold < 0) measurementThreshold = 0;
-        getPrefs().putDouble("KalmanFilter.measurementThreshold", measurementThreshold);
+        putDouble("measurementThreshold", measurementThreshold);
 
         if(measurementThreshold != this.measurementThreshold) {
             this.measurementThreshold = measurementThreshold;
@@ -173,37 +169,34 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         if (in == null || in.getSize() == 0)
             return in;
 
-        if (t < 0)
-            t = in.getFirstTimestamp();
-
+        // TODO: get the performed actions from the controller
+        double[][] act = new double[2][1];
+        
+    	int timestamp = in.getFirstTimestamp(); 
+        if (t >= 0) {
+            double dt = (double)(timestamp - t)/1000000.0;
+            predict(act, dt);        	
+        }
+        t = timestamp;
 
         double[][] bestMeas = new double[2][1];
         double[][] meas     = new double[2][1];
-        double minDistance = -1;
-        int timestamp = t;
-
+        double minDistance = Double.MAX_VALUE;
         for (BasicEvent event : in) {
             meas[0][0] = event.x;
             meas[1][0] = event.y;
 
-            double distance = (mu[0][0]-meas[0][0])*(mu[0][0]-meas[0][0]) +
-                              (mu[1][0]-meas[1][0])*(mu[1][0]-meas[1][0]);
+            double distance = mahalanobis(meas);
 
-            if (distance < minDistance || minDistance < 0) {
+//            System.out.println(distance);
+            if (distance < minDistance) {
                 minDistance = distance;
                 bestMeas[0][0] = meas[0][0];
                 bestMeas[1][0] = meas[1][0];
-                timestamp = event.timestamp;
+                // timestamp = event.timestamp;
             }
         }
 
-        // TODO: get the performed actions from the controller
-        double[][] act = new double[2][1];
-        double dt = (double)(timestamp - t)/1000000.0;
-        t = timestamp;
-
-        predict(act, dt);
-        
         if (minDistance <= measurementThreshold) {
             correct(bestMeas);
         }
@@ -211,17 +204,18 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         return in;
     }
     
-    protected void mahalanobis( double[][] meas )
+    public double mahalanobis( double[][] meas )
     {
         matrixMultiplication(Sigma, CtT, Mnk1);
         matrixMultiplication(Ct,Mnk1,Mkk1);
         matrixSum(Mkk1,Qt,Mkk2);
         invert2by2Matrix(Mkk2,Mkk1); //assuming M2 is a 2*2 matrix
-        // Mkk2 = S^{-1}  --  inverse innovation covariance
+        // Mkk1 = S^{-1}  --  inverse innovation covariance
         matrixMultiplication(Ct,mu,vk1);
         matrixSubstraction(meas,vk1,vk2);
         // vk2 = nu
         // mahalanobis = nuT * S^{-1} * nu
+        return Mkk1[0][0]*vk2[0][0]*vk2[0][0] + 2*Mkk1[1][0]*vk2[0][0]*vk2[1][0] + Mkk1[1][1]*vk2[1][0]*vk2[1][0];
     }
 
     protected void predictMu(double[][] act){ //act is m*1 matrix

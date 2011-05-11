@@ -16,5 +16,6 @@
 *.dat
 *.xsvf
 *.psd
+*.form
 host/java/build/built-jar.properties
 host/java/build/classes/net/sf/jaer/util/jama/ChangeLog

@@ -102,6 +102,8 @@ HKR,,Icon,,"-20"
 %S_DeviceDescDVS128%=_Install, USB\Vid_152A&Pid_8400
 %S_DeviceDescDVS320%=_Install, USB\Vid_152A&Pid_8401
 %S_DeviceDescCochleaAMS%=_Install, USB\Vid_152A&Pid_8405
+; following is yagi lab IVS128x128 scanned silicon retina
+%S_DeviceDescIVS128%=_Install, USB\Vid_04b4&Pid_1004
 %S_DeviceDesccDVSTest%=_Install, USB\Vid_152A&Pid_840A
 ; following device firmware was built in telluride 2008 and is based on silabs C8051f320
 %S_DeviceDescSimpleAESequencer%=_Install, USB\Vid_152A&Pid_8410
@@ -283,6 +285,7 @@ S_DeviceDescStereoTmpdiff128="StereoTmpdiff128"
 S_DeviceDescDVS128="DVS128"
 S_DeviceDescDVS320="DVS320"
 S_DeviceDescCochleaAMS="CochleaAMS"
+S_DeviceDescIVS128="IVS128"
 S_DeviceDesccDVSTest="cDVSTest"
 S_DeviceDescSimpleAESequencer="SimpleAESequencer"
 S_DeviceDescDVS128_PAER="DVS128_PAER"

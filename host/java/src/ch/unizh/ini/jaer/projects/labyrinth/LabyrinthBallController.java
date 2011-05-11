@@ -13,11 +13,10 @@ import java.beans.PropertyChangeListener;
 import java.util.LinkedList;
 import java.util.Observable;
 import java.util.Observer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.glu.GLU;
+import net.sf.jaer.Description;
 import net.sf.jaer.aemonitor.AEConstants;
 import net.sf.jaer.chip.AEChip;
 import net.sf.jaer.event.EventPacket;
@@ -26,20 +25,17 @@ import net.sf.jaer.eventprocessing.FilterChain;
 import net.sf.jaer.eventprocessing.tracking.RectangularClusterTracker.Cluster;
 import net.sf.jaer.graphics.MultilineAnnotationTextRenderer;
 import net.sf.jaer.hardwareinterface.HardwareInterfaceException;
-import net.sf.jaer.util.HexString;
 
 /**
  * This filter enables controlling the tracked labyrinth ball.
  * 
  * @author Tobi Delbruck
  */
+@Description("Low level ball controller for Labyrinth game")
 public class LabyrinthBallController extends EventFilter2DMouseAdaptor implements PropertyChangeListener, Observer {
 
     private int jiggleTimeMs = getInt("jiggleTimeMs", 1000);
 
-    public static final String getDescription() {
-        return "Low level ball controller for Labyrinth game";
-    }
     volatile private Point2D.Float tiltsRad = new Point2D.Float(0, 0);
     // control
     private float proportionalGain = getFloat("proportionalGain", 1);
@@ -79,6 +75,7 @@ public class LabyrinthBallController extends EventFilter2DMouseAdaptor implement
     // path navigation
     PathNavigator nav = new PathNavigator();
     private float dwellTimePathPointMs = getFloat("dwellTimePathPointMs", 100);
+    private int timeToTriggerJiggleAfterBallLostMs=getInt("timeToTriggerJiggleAfterBallLostMs",3000);
 
     /** Constructs instance of the new 'filter' CalibratedPanTilt. The only time events are actually used
      * is during calibration. The PanTilt hardware interface is also constructed.
@@ -88,7 +85,7 @@ public class LabyrinthBallController extends EventFilter2DMouseAdaptor implement
         super(chip);
 
         handDetector = new HandDetector(chip);
-        tracker = new LabyrinthBallTracker(chip);
+        tracker = new LabyrinthBallTracker(chip,this);
         tracker.addObserver(this);
         labyrinthHardware = new LabyrinthHardware(chip);
         labyrinthHardware.getSupport().addPropertyChangeListener(this);
@@ -115,92 +112,107 @@ public class LabyrinthBallController extends EventFilter2DMouseAdaptor implement
         setPropertyTooltip("integralControlUsesPropDerivErrors", "the integral error integrates both position and velocity terms, not just position error");
         setPropertyTooltip("controllerDelayMs", "controller delay in ms; control is computed on position this many ms ahead of current position");
         setPropertyTooltip("dwellTimePathPointMs", "time that ball should dwell at a path point before aiming for next one");
+        setPropertyTooltip("timeToTriggerJiggleAfterBallLostMs", "time to wait after ball is lost to trigger a jiggle");
         computePoles();
     }
 
     @Override
     public EventPacket<?> filterPacket(EventPacket<?> in) {
-        out = getEnclosedFilterChain().filterPacket(in);
-//        if (controllerEnabled) {
-//            control(in, in.getLastTimestamp());
-//        } // control is called from callback via update from tracker
-
+        if (controllerEnabled) {
+            control(in, in.getLastTimestamp());
+        } // control is also called from callback via update from tracker
+       out = getEnclosedFilterChain().filterPacket(in);// TODO real practical problem here that if there is no retina input that survives to tracker, we get no updates here to control on
+ 
         return out;
     }
     private Point2D.Float futurePosErrPix = new Point2D.Float();
     private Point2D.Float derivErrorPPS = new Point2D.Float();
     private Point2D.Float futurePos = new Point2D.Float();
+    long lastTimeBallDetected=0;
 
     private void control(EventPacket in, int timestamp) {
         if (handDetector.isHandDetected()) {
             return;
         }
+        if (tracker.getBall() != null) {
+            lastTimeBallDetected=System.currentTimeMillis();
+            Cluster ball = tracker.getBall();
 
-        target = nav.findTarget();
+            target = nav.findTarget();
 
-        if (target != null) {
-            futurePos.setLocation(tracker.getBallPosition());
-            Point2D.Float velPPS = tracker.getBallVelocity();
-            // future position of ball is given by ball velocity times delay
-            if (controllerDelayMs > 0) {
-                float delSec = 1e-3f * controllerDelayMs;
-                futurePos.setLocation(futurePos.x + velPPS.x * delSec, futurePos.y + velPPS.y * delSec);
+            if (target != null) {
+                futurePos.setLocation(ball.getLocation());
+                Point2D.Float velPPS = tracker.getBallVelocity();
+                // future position of ball is given by ball velocity times delay
+                if (controllerDelayMs > 0) {
+                    float delSec = 1e-3f * controllerDelayMs;
+                    futurePos.setLocation(futurePos.x + velPPS.x * delSec, futurePos.y + velPPS.y * delSec);
+                }
+
+                futurePosErrPix.setLocation(target.x - futurePos.x, target.y - futurePos.y); // vector pointing towards target from future position
+
+                pControl.setLocation(proportionalGain * futurePosErrPix.x, proportionalGain * futurePosErrPix.y); // towards target
+
+                // derivative error is vector rate of change of position error which is related to ball velocity by projection of ball
+                // velocity onto position error vector, not just velocity
+
+//                float dotVelPos=velPPS.x*futurePosErrPix.x+velPPS.y*futurePosErrPix.y; // positive if vel in direction of vector connecting from future pos to target
+//                float futurePosErrLength=(float)futurePosErrPix.distance(0,0); // length of future pos error vector
+//                if(futurePosErrLength<1e-1f){
+//                    futurePosErrLength=1e-1f;
+//                }
+//                
+//                float cosAngle=dotVelPos/futurePosErrLength;
+
+                // projection of ball velocity onto pos error vector
+//                derivErrorPPS.setLocation(futurePosErrPix.x*cosAngle, futurePosErrPix.y*cosAngle); // points in direction of ball motion projected onto pos error vector
+                derivErrorPPS.setLocation(velPPS.x, velPPS.y); // points in direction of ball motion 
+
+
+//                dControl.setLocation(-derivErrorPPS.x * derivativeGain * tau, -derivErrorPPS.y * derivativeGain * tau); // dControl is derivative error term of control signal. It points along line connecting predicated position in future with target.
+                dControl.setLocation(-derivErrorPPS.x * derivativeGain * tau, -derivErrorPPS.y * derivativeGain * tau);
+                if (!controllerInitialized) {
+                    lastErrorUpdateTime = timestamp; // initialize to avoid giant dt, will be zero on first pass
+                    controllerInitialized = true;
+                }
+                int dtUs = timestamp - lastErrorUpdateTime;
+                float dtSec = dtUs * 1e-6f * AEConstants.TICK_DEFAULT_US;
+                float iFac = integralGain * dtSec / tau;
+                if (integralControlUsesPropDerivErrors) {
+                    iControl.x += iFac * (futurePosErrPix.x - derivErrorPPS.x * tau);
+                    iControl.y += iFac * (futurePosErrPix.y - derivErrorPPS.y * tau);
+                } else {
+                    iControl.x += iFac * futurePosErrPix.x;
+                    iControl.y += iFac * futurePosErrPix.y;
+                }
+                lastErrorUpdateTime = timestamp;
+                // anti windup control
+                float intLim = getTiltLimitRad();
+                iControl.x = windupLimit(iControl.x, intLim);
+                iControl.y = windupLimit(iControl.y, intLim);
+//                System.out.println("ierr= "+iControl);
+
+//                pTilt.setLocation(pControl.x, pControl.y);
+//                iTilt.setLocation(iControl.x, iControl.y);
+//                dTilt.setLocation(dControl.x, dControl.y);
+
+                float xtilt = pControl.x + dControl.x + iControl.x;
+                float ytilt = pControl.y + dControl.y + iControl.y;
+                try {
+                    setTilts(xtilt, ytilt);
+                } catch (HardwareInterfaceException ex) {
+                    // TODO ignore for now - need to handle hardware errors in any case in servo class better
+                }
             }
-
-            futurePosErrPix.setLocation(target.x - futurePos.x, target.y - futurePos.y); // vector pointing towards target from future position
-
-            pControl.setLocation(proportionalGain * futurePosErrPix.x, proportionalGain * futurePosErrPix.y); // towards target
-
-            // derivative error is vector rate of change of position error which is related to ball velocity by projection of ball
-            // velocity onto position error vector, not just velocity
-
-    //                float dotVelPos=velPPS.x*futurePosErrPix.x+velPPS.y*futurePosErrPix.y; // positive if vel in direction of vector connecting from future pos to target
-    //                float futurePosErrLength=(float)futurePosErrPix.distance(0,0); // length of future pos error vector
-    //                if(futurePosErrLength<1e-1f){
-    //                    futurePosErrLength=1e-1f;
-    //                }
-    //
-    //                float cosAngle=dotVelPos/futurePosErrLength;
-
-            // projection of ball velocity onto pos error vector
-    //                derivErrorPPS.setLocation(futurePosErrPix.x*cosAngle, futurePosErrPix.y*cosAngle); // points in direction of ball motion projected onto pos error vector
-            derivErrorPPS.setLocation(velPPS.x, velPPS.y); // points in direction of ball motion
-
-
-    //                dControl.setLocation(-derivErrorPPS.x * derivativeGain * tau, -derivErrorPPS.y * derivativeGain * tau); // dControl is derivative error term of control signal. It points along line connecting predicated position in future with target.
-            dControl.setLocation(-derivErrorPPS.x * derivativeGain * tau, -derivErrorPPS.y * derivativeGain * tau);
-            if (!controllerInitialized) {
-                lastErrorUpdateTime = timestamp; // initialize to avoid giant dt, will be zero on first pass
-                controllerInitialized = true;
+        } else {
+            long timeNow=System.currentTimeMillis();
+            long timeSinceBallLost=timeNow-lastTimeBallDetected;
+            if(timeSinceBallLost>getTimeToTriggerJiggleAfterBallLostMs()){
+                timeSinceBallLost=timeNow+getJiggleTimeMs();
+                log.info("ball lost, triggering a jiggle");
+                doJiggleTable();
             }
-            int dtUs = timestamp - lastErrorUpdateTime;
-            float dtSec = dtUs * 1e-6f * AEConstants.TICK_DEFAULT_US;
-            float iFac = integralGain * dtSec / tau;
-            if (integralControlUsesPropDerivErrors) {
-                iControl.x += iFac * (futurePosErrPix.x - derivErrorPPS.x * tau);
-                iControl.y += iFac * (futurePosErrPix.y - derivErrorPPS.y * tau);
-            } else {
-                iControl.x += iFac * futurePosErrPix.x;
-                iControl.y += iFac * futurePosErrPix.y;
-            }
-            lastErrorUpdateTime = timestamp;
-            // anti windup control
-            float intLim = getTiltLimitRad();
-            iControl.x = windupLimit(iControl.x, intLim);
-            iControl.y = windupLimit(iControl.y, intLim);
-    //                System.out.println("ierr= "+iControl);
-
-    //                pTilt.setLocation(pControl.x, pControl.y);
-    //                iTilt.setLocation(iControl.x, iControl.y);
-    //                dTilt.setLocation(dControl.x, dControl.y);
-
-            float xtilt = pControl.x + dControl.x + iControl.x;
-            float ytilt = pControl.y + dControl.y + iControl.y;
-            try {
-                setTilts(xtilt, ytilt);
-            } catch (HardwareInterfaceException ex) {
-                // TODO ignore for now - need to handle hardware errors in any case in servo class better
-            }
+            resetControllerState();
         }
     }
 
@@ -269,13 +281,14 @@ public class LabyrinthBallController extends EventFilter2DMouseAdaptor implement
             glu.gluDisk(quad, 0, 3, 32, 1);
             gl.glPopMatrix();
             // draw error vector if ball is tracked also
-            gl.glLineWidth(2f);
-            gl.glColor4f(.25f, .25f, 0, .3f);
-            gl.glBegin(GL.GL_LINES);
-            gl.glVertex2f(tracker.getBallPosition().x, tracker.getBallPosition().y);
-            gl.glVertex2f(target.x, target.y);
-            gl.glEnd();
-            
+            if (tracker.getBall() != null) {
+                gl.glLineWidth(2f);
+                gl.glColor4f(.25f, .25f, 0, .3f);
+                gl.glBegin(GL.GL_LINES);
+                gl.glVertex2f(tracker.getBall().getLocation().x, tracker.getBall().getLocation().y);
+                gl.glVertex2f(target.x, target.y);
+                gl.glEnd();
+            }
         }
         // draw table tilt values
         final float size = .1f;
@@ -472,7 +485,7 @@ public class LabyrinthBallController extends EventFilter2DMouseAdaptor implement
     }
 
     /**
-     * @return the tilts
+     * @return the tilts in radians, pan is x and tilt is y. pan tilts table horizontally to affect ball acceleration along x axis and tilt affects y axis acceleration.
      */
     public Point2D.Float getTiltsRad() {
         return tiltsRad;
@@ -770,6 +783,21 @@ public class LabyrinthBallController extends EventFilter2DMouseAdaptor implement
     public void setDwellTimePathPointMs(float dwellTimePathPointMs) {
         this.dwellTimePathPointMs = dwellTimePathPointMs;
         putFloat("dwellTimePathPointMs", dwellTimePathPointMs);
+    }
+
+    /**
+     * @return the timeToTriggerJiggleAfterBallLostMs
+     */
+    public int getTimeToTriggerJiggleAfterBallLostMs() {
+        return timeToTriggerJiggleAfterBallLostMs;
+    }
+
+    /**
+     * @param timeToTriggerJiggleAfterBallLostMs the timeToTriggerJiggleAfterBallLostMs to set
+     */
+    public void setTimeToTriggerJiggleAfterBallLostMs(int timeToTriggerJiggleAfterBallLostMs) {
+        this.timeToTriggerJiggleAfterBallLostMs = timeToTriggerJiggleAfterBallLostMs;
+        putInt("timeToTriggerJiggleAfterBallLostMs",timeToTriggerJiggleAfterBallLostMs);
     }
 
     enum NavigatorState {
