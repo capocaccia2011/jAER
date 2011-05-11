@@ -37,7 +37,7 @@ public class DepressionMap extends EventFilter2D implements FrameAnnotater {
 	private boolean learnMap = false;
 	private boolean showMap  = false;
 
-        private String FilePath = getString("DepressionMap.FilePath", "/home/lorenz/Kalman.map");
+        private String FilePath = getString("DepressionMap.FilePath", "KalmanDepression.map");
         //private File absolutePath = new File("/home/lorenz/capo/Kalman.map");
 
 
@@ -63,6 +63,9 @@ public class DepressionMap extends EventFilter2D implements FrameAnnotater {
 					map[x][y] = s.nextDouble();
 
                     }
+                catch(Exception e){
+                        System.err.println ("Error loading file");
+                    }
                 finally {
                         s.close();
                     }
@@ -71,16 +74,47 @@ public class DepressionMap extends EventFilter2D implements FrameAnnotater {
 	@Override
 	final public void resetFilter()
 	{
-		cameraX = chip.getSizeX();
+                File f = new File(FilePath);
+                cameraX = chip.getSizeX();
 		cameraY = chip.getSizeY();
 
 		map = new double[cameraX][cameraY];
+                
+                System.out.println("f.exists:"+f.exists());
+                if(f.exists())
+                {
+                    getFilePath();
+                    System.out.println(FilePath);
+                    Scanner s = null;
+                    double sum = 0;
+                    try {
+                            s = new Scanner(
+                             new BufferedReader(new FileReader(FilePath)));
+
+                            for (int x = 0; x < cameraX; x++)
+				for (int y = 0; y < cameraY; y++)
+					map[x][y] = s.nextDouble();
+
+                        }
+                    catch(Exception e){
+                            System.err.println ("Error loading file");
+                        }
+                    finally {
+                            s.close();
+                        }
+                    
+                }
+
+                else
+                {
+
 		for (int x = 0; x < cameraX; x++)
 			for (int y = 0; y < cameraY; y++)
 				map[x][y] = 1.0;
+                }
 		maxMap = 0.0;
 
-		System.out.println("DepressionMap reset.");
+		System.out.println("DepressionMap reset");
 	}
 
         synchronized public void doSaveMap(){
@@ -162,6 +196,9 @@ public class DepressionMap extends EventFilter2D implements FrameAnnotater {
 
 		if (in == null || in.getSize() == 0)
 			return in;
+
+                if(map == null)
+                    return in;
 
                 checkOutputPacketEventType(WeightedEvent.class);
                 OutputEventIterator itr = out.outputIterator();
