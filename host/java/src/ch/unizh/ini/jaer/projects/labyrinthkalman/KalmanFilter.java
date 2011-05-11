@@ -21,34 +21,36 @@ import net.sf.jaer.graphics.FrameAnnotater;
  */
 public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
-    /* Kalman filter parameters:*/
-    private double[][] At;
-    private double[][] AtT;
-    private double[][] Bt;
-    private double[][] Ct;
-    private double[][] CtT;
+    // n == size of state vector
+    // m == size of control vector
+    // k == size of measurement vector
 
-    private double[][] mu;
-    private double[][] Sigma;
+    // Kalman filter parameters:
+	private double[][] At;    // n*n, project state to state
+    private double[][] Bt;    // n*m, project control to state
+    private double[][] Ct;    // k*n, project state to measurement
 
-    private double[][] Kt;
-    private double[][] Rt;
-    private double[][] Qt;
+    private double[]   mu;    // n
+    private double[][] Sigma; // n*n
+
+    private double[][] S;     // innovation covariance, k*k
+    private double[][] SInv;  // S^{-1}, inverse innovation covariance, k*k
+
+    private double[][] Kt;    // n*k
+    private double[][] Rt;    // n*n, process noise covariance
+    private double[][] Qt;    // k*k, measurement noise covariance
 
     // the timestamp of the most recent received event
     private int t = -1;
 
     /* Auxiliary matrices used for intermediate results:*/
     private double[][] Mnn1; //n*n, i.e., the size of At
-    private double[][] Mnn2; //n*n, i.e., the size of At
     private double[][] Mnk1; //n*k, i.e., the size of Kt and CtT
-    private double[][] Mkk1; //k*k, i.e., the size of Qt
-    private double[][] Mkk2; //k*k, i.e., the size of Qt
 
-    private double[][] vn1; //n*1, i.e., the size of mu
-    private double[][] vn2; //n*1, i.e., the size of mu
-    private double[][] vk1; //k*1, i.e., the size of meas
-    private double[][] vk2; //k*1, i.e., the size of meas
+    private double[] vn1; //n*1, i.e., the size of mu
+    private double[] vn2; //n*1, i.e., the size of mu
+    private double[] vk1; //k*1, i.e., the size of meas
+    private double[] vk2; //k*1, i.e., the size of meas
 
     // parameters
     private double measurementSigma = getDouble("measurementSigma", 3.0);
@@ -58,33 +60,34 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     private boolean annotationEnabled = true;
     LabyrinthBallController controller;
     
+    public KalmanFilter(AEChip chip) {
+    	this(chip,null);
+    }
+
     public KalmanFilter(AEChip chip, LabyrinthBallController controller) {
         super(chip);
         this.controller=controller;
         At = new double[6][6];
-        AtT = new double[6][6];
         Bt = new double[6][2];
         Ct = new double[2][6];
-        CtT = new double[6][2];
         Kt = new double[6][2];
 
         Qt = new double[2][2];
         Rt = new double[6][6];
         
-        mu = new double[6][1];
+        mu = new double[6];
         Sigma = new double[6][6];
 
-        vn1 = new double[6][1];
-        vn2 = new double[6][1];
+        vn1 = new double[6];
+        vn2 = new double[6];
         
-        vk1 = new double[2][1];
-        vk2 = new double[2][1];
+        vk1 = new double[2];
+        vk2 = new double[2];
 
         Mnn1 = new double[6][6];
-        Mnn2 = new double[6][6];
         Mnk1 = new double[6][2];
-        Mkk1 = new double[2][2];
-        Mkk2 = new double[2][2];
+        SInv = new double[2][2];
+        S = new double[2][2];
 
         resetFilter();
     }
@@ -140,19 +143,18 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 
         for ( int i = 0; i < 6; ++i )
         {
-            mu[i][0] = 0;
+            mu[i] = 0;
             for ( int j = 0; j < 6; ++j )
                 Sigma[i][j] = 0;
 
 //            Sigma[i][i] = 0.0; // TODO   THIS IS ONLY FOR TESTING
         }
 
-        mu[0][0] = 64;
-        mu[1][0] = 64;
+        mu[0] = 64;
+        mu[1] = 64;
 
         Ct[0][0] = 1;
         Ct[1][1] = 1;
-        transposeMatrix( Ct, CtT );
     }
 
     @Override
@@ -170,7 +172,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
             return in;
 
         // TODO: get the performed actions from the controller
-        double[][] act = new double[2][1];
+        final double[] act = new double[2];
         
     	int timestamp = in.getFirstTimestamp(); 
         if (t >= 0) {
@@ -179,20 +181,20 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         }
         t = timestamp;
 
-        double[][] bestMeas = new double[2][1];
-        double[][] meas     = new double[2][1];
+        final double[] bestMeas = new double[2];
+        final double[] meas     = new double[2];
         double minDistance = Double.MAX_VALUE;
         for (BasicEvent event : in) {
-            meas[0][0] = event.x;
-            meas[1][0] = event.y;
+            meas[0] = event.x;
+            meas[1] = event.y;
 
-            double distance = mahalanobis(meas);
+            double distance = mahalanobisToMeasurement(meas);
 
 //            System.out.println(distance);
             if (distance < minDistance) {
                 minDistance = distance;
-                bestMeas[0][0] = meas[0][0];
-                bestMeas[1][0] = meas[1][0];
+                bestMeas[0] = meas[0];
+                bestMeas[1] = meas[1];
                 // timestamp = event.timestamp;
             }
         }
@@ -204,89 +206,91 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         return in;
     }
     
-    public double mahalanobis( double[][] meas )
+    /**
+     * Compute S and S^{-1}.
+     */
+    protected void computeSInv()
     {
-        matrixMultiplication(Sigma, CtT, Mnk1);
-        matrixMultiplication(Ct,Mnk1,Mkk1);
-        matrixSum(Mkk1,Qt,Mkk2);
-        invert2by2Matrix(Mkk2,Mkk1); //assuming M2 is a 2*2 matrix
-        // Mkk1 = S^{-1}  --  inverse innovation covariance
-        matrixMultiplication(Ct,mu,vk1);
-        matrixSubstraction(meas,vk1,vk2);
-        // vk2 = nu
-        // mahalanobis = nuT * S^{-1} * nu
-        return Mkk1[0][0]*vk2[0][0]*vk2[0][0] + 2*Mkk1[1][0]*vk2[0][0]*vk2[1][0] + Mkk1[1][1]*vk2[1][0]*vk2[1][0];
+    	MatrixOps.multABAT( Ct, Sigma, S );
+    	MatrixOps.increment( S, Qt );
+    	MatrixOps.invert2by2Matrix( S, SInv );
     }
 
-    protected void predictMu(double[][] act){ //act is m*1 matrix
-        matrixMultiplication(At,mu,vn1);
-        matrixMultiplication(Bt,act,vn2);
-        matrixSum(vn1,vn2,mu);
+    public double mahalanobisToMeasurement( final double[] meas )
+    {
+    	computeSInv();
+        MatrixOps.mult(Ct,mu,vk1);
+        MatrixOps.subtract(meas,vk1,vk2); // vk2 = nu
+        // mahalanobis = nuT * S^{-1} * nu
+        MatrixOps.mult( SInv, vk2, vk1 );
+        return MatrixOps.dot( vk2, vk1 );
+    }
+
+    protected void predictMu( final double[] act ){ //act is m vector
+    	MatrixOps.mult(At,mu,vn1);
+        MatrixOps.mult(Bt,act,vn2);
+        MatrixOps.add(vn1,vn2,mu);
     }
 
     protected void predictSigma(){
-        matrixMultiplication(At, Sigma, Mnn1);
-        matrixMultiplication(Mnn1,AtT,Mnn2);
-        matrixSum(Mnn2,Rt,Sigma);
+        MatrixOps.multABAT( At, Sigma, Mnn1 );
+        MatrixOps.add( Mnn1, Rt, Sigma );
     }
 
-    protected void updateKalmanGain(){
-        matrixMultiplication(Sigma, CtT, Mnk1);
-        matrixMultiplication(Ct,Mnk1,Mkk1);
-        matrixSum(Mkk1,Qt,Mkk2);
-        invert2by2Matrix(Mkk2,Mkk1); //assuming M2 is a 2*2 matrix
-        matrixMultiplication(Mnk1,Mkk1,Kt);
+    protected void updateKalmanGain()
+    {        
+        computeSInv();
+    	MatrixOps.multABT( Sigma, Ct, Mnk1 );
+        MatrixOps.mult( Mnk1, SInv, Kt );
     }
 
-    protected void correctMu(double[][] meas){ //meas is k*1 matrix
-        matrixMultiplication(Ct,mu,vk1);
-        matrixSubstraction(meas,vk1,vk2);
-        matrixMultiplication(Kt,vk2,vn1);
-        matrixSum(mu,vn1,mu);
+    protected void correctMu(double[] meas){ //meas is k vector
+    	MatrixOps.mult(Ct,mu,vk1);
+        MatrixOps.subtract(meas,vk1,vk2);
+        MatrixOps.mult(Kt,vk2,vn1);
+        MatrixOps.add(mu,vn1,mu);
     }
 
     protected void correctSigma(){
-        matrixMultiplication(Kt,Ct,Mnn1);
-        matrixMultiplication(Mnn1,Sigma,Mnn2);
-        matrixSubstraction(Sigma,Mnn2,Sigma);
+    	MatrixOps.multABAT( Kt, S, Mnn1 );
+        MatrixOps.decrement( Sigma, Mnn1 );
     }
 
-    public void updateFilter(double[][] act, double[][] meas, double dt){
+    public void updateFilter( final double[] act, final double[] meas, double dt ){
 
         predict(act, dt);
         correct(meas);
     }
 
-    public void predict(double[][] act, double dt) {
+    public void predict( final double[] act, double dt ) {
 
-    	// System.out.println("predict (" + matrixToString( act ) + ", " + dt + ")" );
+    	// System.out.println("predict (" + MatrixOps.toString( act ) + ", " + dt + ")" );
         updateAt(dt);
         updateBt(dt);
         updateRt(dt);
         // checkRtComputation();
-  	// System.out.println("At = \n" + matrixToString( At ) );
-    	// System.out.println("AtT = \n" + matrixToString( AtT ) );
-    	// System.out.println("Bt = \n" + matrixToString( Bt ) );
-    	// System.out.println("Rt = \n" + matrixToString( Rt ) );
-    	// System.out.println("mu = \n" + matrixToString( mu ) );
-    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
+        // System.out.println("At = \n" + MatrixOps.toString( At ) );
+    	// System.out.println("Bt = \n" + MatrixOps.toString( Bt ) );
+    	// System.out.println("Rt = \n" + MatrixOps.toString( Rt ) );
+    	// System.out.println("mu = \n" + MatrixOps.toString( mu ) );
+    	// System.out.println("Sigma = \n" + MatrixOps.toString( Sigma ) );
         predictMu(act);
         predictSigma();
-    	// System.out.println("mu = \n" + matrixToString( mu ) );
-    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
+    	// System.out.println("mu = \n" + MatrixOps.toString( mu ) );
+    	// System.out.println("Sigma = \n" + MatrixOps.toString( Sigma ) );
     }
 
-    public void correct(double[][] meas) {
+    public void correct( final double[] meas ) {
 
-    	// System.out.println("correct (" + matrixToString( meas ) + ")" );
+    	// System.out.println("correct (" + MatrixOps.toString( meas ) + ")" );
         updateKalmanGain();
-    	// System.out.println("Kt = \n" + matrixToString( Kt ) );
-    	// System.out.println("mu = \n" + matrixToString( mu ) );
-    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
+    	// System.out.println("Kt = \n" + MatrixOps.toString( Kt ) );
+    	// System.out.println("mu = \n" + MatrixOps.toString( mu ) );
+    	// System.out.println("Sigma = \n" + MatrixOps.toString( Sigma ) );
         correctMu(meas);
         correctSigma();
-    	// System.out.println("mu = \n" + matrixToString( mu ) );
-    	// System.out.println("Sigma = \n" + matrixToString( Sigma ) );
+    	// System.out.println("mu = \n" + MatrixOps.toString( mu ) );
+    	// System.out.println("Sigma = \n" + MatrixOps.toString( Sigma ) );
     }
 
     public void updateAt(double dt){  /** Assuming At is initialized as double[6][6] */
@@ -306,8 +310,6 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         At[3][5] = b;
         At[4][4] = 1; //constant
         At[5][5] = 1; //constant
-
-        transposeMatrix(At, AtT);
     }
 
     public void updateBt(double dt){  /** Assuming Bt is initialized as double[6][2] */
@@ -362,13 +364,13 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 	    procNoiseCov[0][0] = cov;
 	    procNoiseCov[1][1] = cov;
 	    double[][] t1 = new double[6][2];
-	    matrixMultiplication( Bt, procNoiseCov, t1 );
+	    MatrixOps.mult( Bt, procNoiseCov, t1 );
 	    double[][] t2 = new double[6][6];
 	    double[][] BtT = new double[2][6];
-	    transposeMatrix( Bt, BtT );
-	    System.out.println( matrixToString( Bt ) );
-	    System.out.println( matrixToString( BtT ) );
-	    matrixMultiplication( t1, BtT, t2 );
+	    MatrixOps.transpose( Bt, BtT );
+	    System.out.println( MatrixOps.toString( Bt ) );
+	    System.out.println( MatrixOps.toString( BtT ) );
+	    MatrixOps.mult( t1, BtT, t2 );
 	    
 	    boolean ok = true;
 	    for ( int i = 0; i < 6; ++i )
@@ -383,9 +385,9 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
 	    
 	    if (!ok) {
 		    double[][] diff = new double[6][6];
-		    matrixSubstraction( Rt, t2, diff );
+		    MatrixOps.subtract( Rt, t2, diff );
 		    System.out.println( "updateRt() is broken. diff to expected matrix is" );
-		    System.out.println( matrixToString( diff ) );
+		    System.out.println( MatrixOps.toString( diff ) );
 	    }
 	    else
 	    {
@@ -394,149 +396,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
     }
     
     
-    public static void matrixCopy(double[][] A, double[][] R){
 
-        int Arow = A[0].length;
-        int Acol = A.length;
-
-        for(int i=0; i<Acol; i++){
-            for(int j=0; j<Arow; j++){
-                R[i][j] = A[i][j];
-            }
-        }
-    }
-
-    public static void matrixSum(double[][] A, double[][] B, double[][] R){ /**
-                                                                             * result: R=A+B
-     */
-        int Arow = A[0].length;
-        int Acol = A.length;
-
-        for(int i=0; i<Acol; i++){
-            for(int j=0; j<Arow; j++){
-                R[i][j] = A[i][j]+B[i][j];
-            }
-        }
-    }
-
-    public static void matrixSubstraction(double[][] A, double[][] B, double[][] R){ /**
-                                                                             * result: R=A-B
-     */
-        int Arow = A[0].length;
-        int Acol = A.length;
-
-        for(int i=0; i<Acol; i++){
-            for(int j=0; j<Arow; j++){
-                R[i][j] = A[i][j]-B[i][j];
-            }
-        }
-    }
-
-
-    public static void matrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
-    result: R=A*B */
-    int Arows = A.length;
-    int Acols = A[0].length;
-
-    int Bcols = B[0].length;
-
-    for(int i=0; i<Arows; i++){
-        for(int j=0; j<Bcols; j++){
-        	double sum = 0;
-            for(int k=0; k<Acols; k++){
-                sum += A[i][k]*B[k][j];
-            }
-            R[i][j] = sum;
-        }
-    }
-    }
-
-    public static void upperTriangularMatrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
-    A is an upper triangular matrix, result: R=A*B */
-    int Arow = A[0].length;
-    int Acol = A.length;
-
-    int Brow = B[0].length;
-//    int Bcol = B.length;
-
-    for(int i=0; i<Acol; i++){
-        for(int j=0; j<Brow; j++){
-        	double sum = 0;
-            for(int k=i; k<Arow; k++){
-            	sum += A[i][k]*B[k][j];
-            }
-        	R[i][j] = sum;
-        }
-    }
-}
-
-    public static void lowerTriangularMatrixMultiplication(double[][] A, double[][] B, double[][] R){ /**
-    B is a lower triangular matrix, result: R=A*B */
-    int Arow = A[0].length;
-    int Acol = A.length;
-
-    int Brow = B[0].length;
-    int Bcol = B.length;
-
-    for(int i=0; i<Acol; i++){
-        for(int j=0; j<Brow; j++){
-        	double sum = 0;
-            for(int k=0; k<=i; k++){
-            	sum += A[i][k]*B[k][j];
-            }
-            R[i][j] = sum;
-        }
-    }
-}
-
-    public static void transposeMatrix(double[][] A, double[][] R){/** result: R = transpose(A)*/
-        int Arows = A.length;
-        int Acols = A[0].length;
-
-        for(int i=0; i<Arows; i++){
-            for(int j=0; j<Acols; j++){
-                R[j][i] = A[i][j];
-            }
-        }
-    }
-
-    public static void invert2by2Matrix(double[][] A, double[][] R){/**
-                                                                 * A is 2 by 2 matrix,
-                                                                 * result: R = inv (A) Ü
-                                                                 * if det(A) != 0, else R = 0
-     */
-    double detA = A[0][0]*A[1][1]-A[0][1]*A[1][0];
-    if(detA == 0){
-         R[0][0] = 0;
-         R[0][1] = 0;
-         R[1][0] = 0;
-         R[1][1] = 0;
-    }
-    else{
-    R[0][0] = (1/detA)*A[1][1];
-    R[0][1] = -(1/detA)*A[0][1];
-    R[1][0] = -(1/detA)*A[1][0];
-    R[1][1] = (1/detA)*A[0][0];
-    }
-    }
-
-    public static String matrixToString( double[][] m )
-    {
-        final int rows = m.length;
-        final int cols = m[0].length;
-        
-        String result = "";
-        for ( int i = 0; i < rows; ++i )
-        {
-            for ( int j = 0; j < cols; ++j )
-            {
-                result += String.format( "%6.3f ", m[i][j] );                
-            }
-            result += "\n";
-        }
-        return result;
-    }
-    
     @Override
     public void setAnnotationEnabled(boolean annotationEnabled) {
         this.annotationEnabled = annotationEnabled;
@@ -573,7 +433,7 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         double theta = 0.5 * Math.atan2( (2*b), (a-c) ) * 180.0 / Math.PI;
 
         gl.glPushMatrix();
-        gl.glTranslated(mu[0][0], mu[1][0], 0);
+        gl.glTranslated(mu[0], mu[1], 0);
         gl.glRotated(theta, 0, 0, 1);
         gl.glScaled(scale1, scale2, 1);
         gl.glBegin(GL.GL_LINE_LOOP);
@@ -585,14 +445,14 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         gl.glEnd();
         gl.glPopMatrix();
 
-        double velx = mu[2][0];
-        double vely = mu[3][0];
+        double velx = mu[2];
+        double vely = mu[3];
 
         gl.glColor3f(1,0,0);
         gl.glLineWidth(4);
 
         gl.glPushMatrix();
-        gl.glTranslated(mu[0][0], mu[1][0], 0);
+        gl.glTranslated(mu[0], mu[1], 0);
         gl.glBegin(GL.GL_LINES);
         gl.glVertex2d(0, 0);
         gl.glVertex2d(velx, vely);
@@ -602,34 +462,34 @@ public class KalmanFilter extends EventFilter2D implements FrameAnnotater {
         gl.glColor3f(1,1,1);
         gl.glBegin(GL.GL_LINES);
         gl.glVertex2d(64, 64);
-        gl.glVertex2d(mu[0][0], mu[1][0]);
+        gl.glVertex2d(mu[0], mu[1]);
         gl.glEnd();
     }
 
     public Point2D.Float getBallPosition() {
 
         Point2D.Float position = new Point2D.Float();
-        position.setLocation(mu[0][0], mu[1][0]);
+        position.setLocation(mu[0], mu[1]);
         return position;
     }
 
     public double getBallPositionX() {
-        return mu[0][0];
+        return mu[0];
     }
 
     public double getBallPositionY() {
-        return mu[1][0];
+        return mu[1];
     }
     public Point2D.Float getBallVelocity() {
 
         Point2D.Float position = new Point2D.Float();
-        position.setLocation(mu[2][0], mu[3][0]);
+        position.setLocation(mu[2], mu[3]);
         return position;
     }
 
 //    public void setBallPosition(Point2D.Float position) {
 //        initFilter();
-//        mu[0][0] = position.getX();
-//        mu[1][0] = position.getY();
+//        mu[0] = position.getX();
+//        mu[1] = position.getY();
 //    }
 }
