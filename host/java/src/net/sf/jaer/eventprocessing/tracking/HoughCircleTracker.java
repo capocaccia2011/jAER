@@ -21,12 +21,14 @@ import java.awt.*;
 import java.awt.event.*;
 
 import javax.swing.*;
+import net.sf.jaer.Description;
 import ch.unizh.ini.jaer.projects.labyrinthkalman.WeightedEvent;
 
 /**
- * A simple circle tracker based on a hough transform.
+ * A simple circle tracker based on a hough transform that correctly tracks the maximum even when it's location changes out from under us.
  * @author Jan Funke
  */
+@Description("Circle tracker based on a hough transform")
 public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater, Observer {
 
 	// the Hough space
@@ -70,14 +72,17 @@ public class HoughCircleTracker extends EventFilter2D implements FrameAnnotater,
 	private boolean locDepression  = getPrefs().getBoolean("HoughCirclreTracker.locDepression", true);
 
 
-	public boolean isGeneratingFilter() {
-		return false;
-	}
-
 	public HoughCircleTracker(AEChip chip) {
 		super(chip);
 		chip.addObserver(this);
 		resetFilter();
+                setPropertyTooltip("radius","radius of circle in pixels");
+                setPropertyTooltip("bufferLength","number of events to consider when searching for new maximum location");
+                setPropertyTooltip("threshold",""); // TODO
+                setPropertyTooltip("decay","");
+                setPropertyTooltip("nrMax","");
+                setPropertyTooltip("decayMode","");
+                setPropertyTooltip("drawHough","overlays the Hough space real values on the sensor output");
 	}
 
 	public Object getFilterState() {
