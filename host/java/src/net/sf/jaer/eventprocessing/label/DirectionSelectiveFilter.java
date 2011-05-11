@@ -25,6 +25,8 @@ import java.util.Observer;
 import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.glu.*;
+import net.sf.jaer.Description;
+import net.sf.jaer.DevelopmentStatus;
 
 /**
  * Computes motion based nearest event (in past time) in neighboring pixels.
@@ -35,10 +37,9 @@ import javax.media.opengl.glu.*;
  *
  * @author tobi
  */
+@Description("Local motion by time-of-travel of orientation events")
+@DevelopmentStatus(DevelopmentStatus.Status.Stable)
 public class DirectionSelectiveFilter extends EventFilter2D implements Observer, FrameAnnotater {
-    public static String getDescription(){
-        return "Local motion by time-of-travel of orientation events";
-    }
     public boolean isGeneratingFilter(){ return true;}
     final int NUM_INPUT_TYPES=8; // 4 orientations * 2 polarities
     private int sizex,sizey; // chip sizes

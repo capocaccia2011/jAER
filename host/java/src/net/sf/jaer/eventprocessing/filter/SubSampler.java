@@ -12,6 +12,8 @@
 
 package net.sf.jaer.eventprocessing.filter;
 
+import net.sf.jaer.Description;
+import net.sf.jaer.DevelopmentStatus;
 import net.sf.jaer.chip.AEChip;
 import net.sf.jaer.event.*;
 import net.sf.jaer.eventprocessing.EventFilter2D;
@@ -21,10 +23,9 @@ import net.sf.jaer.eventprocessing.EventFilter2D;
  *
  * @author tobi
  */
+@Description("Subsamples x and y addresses")
+@DevelopmentStatus(DevelopmentStatus.Status.Stable)
 public class SubSampler extends EventFilter2D {
-    public static String getDescription(){
-        return "Subsamples x and y addresses";
-    }
     
     private int bits;
     short shiftx, shifty;

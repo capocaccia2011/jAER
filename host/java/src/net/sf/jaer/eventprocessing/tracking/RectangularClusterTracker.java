@@ -10,7 +10,6 @@
 package net.sf.jaer.eventprocessing.tracking;
 
 import com.sun.opengl.util.GLUT;
-import java.util.List;
 import net.sf.jaer.aemonitor.AEConstants;
 import net.sf.jaer.chip.*;
 import net.sf.jaer.eventprocessing.EventFilter2D;
@@ -26,6 +25,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
+import net.sf.jaer.Description;
 import net.sf.jaer.util.filter.LowpassFilter;
 
 /**
@@ -35,13 +35,11 @@ import net.sf.jaer.util.filter.LowpassFilter;
  * <p>
  * @author tobi
  */
+@Description("Tracks multiple moving compact (not linear) objects")
 public class RectangularClusterTracker extends EventFilter2D implements Observer, ClusterTrackerInterface, FrameAnnotater /*, PreferenceChangeListener*/ {
     // TODO split out the Cluster object as it's own class.
     // TODO delegate worker object to update the clusters (RectangularClusterTrackerDelegate)
 
-    public static String getDescription() {
-        return "Tracks multiple moving compact (not linear) objects";
-    }
     /** The list of clusters. */
     volatile protected java.util.List<Cluster> clusters = new LinkedList<Cluster>();
     private AEChipRenderer renderer;
@@ -113,7 +111,8 @@ public class RectangularClusterTracker extends EventFilter2D implements Observer
     private boolean angleFollowsVelocity = getBoolean("angleFollowsVelocity", false);
     private boolean showPaths=getBoolean("showPaths",true);
 
-
+     private  KalmanFilter kalmanFilter;
+  
 
     public enum ClusterLoggingMethod {
 
@@ -185,6 +184,9 @@ public class RectangularClusterTracker extends EventFilter2D implements Observer
 //        setPropertyTooltip("opticalGyroTauHighpassMs", "highpass filter time constant in ms for optical gyro position, increase to forget DC value more slowly");
 //    {setPropertyTooltip("velocityMixingFactor","how much cluster velocityPPT estimate is updated by each packet (IIR filter constant)");}
 //    {setPropertyTooltip("velocityTauMs","time constant in ms for cluster velocityPPT lowpass filter");}
+
+//                kalmanFilter = new KalmanFilter(chip,this);
+//        setEnclosedFilter(kalmanFilter);
 
 
     }
@@ -372,7 +374,7 @@ public class RectangularClusterTracker extends EventFilter2D implements Observer
 //            s.println("case " + c.getClusterNumber());
             s.println("case " + clusterCounter++);
             s.print("path=[");
-            List<ClusterPathPoint> path = c.getPath();
+            java.util.List<ClusterPathPoint> path = c.getPath();
             for (ClusterPathPoint p : path) {
                 s.print(p + ";");
             }
@@ -1258,7 +1260,7 @@ public class RectangularClusterTracker extends EventFilter2D implements Observer
                 gl.glPointSize(PATH_POINT_SIZE);
                 gl.glBegin(GL.GL_POINTS);
                 {
-                    List<ClusterPathPoint> points = getPath();
+                    java.util.List<ClusterPathPoint> points = getPath();
                     for (Point2D.Float p : points) {
                         gl.glVertex2f(p.x, p.y);
                     }
@@ -2210,7 +2212,11 @@ public class RectangularClusterTracker extends EventFilter2D implements Observer
         return this.clusters;
     }
 
-    private LinkedList<RectangularClusterTracker.Cluster> getPruneList() {
+    /** Returns the list of clusters that will be pruned because they have not received enough support (enough events in their region of interest) or because 
+     * they have been merged with other clusters. 
+     * @return the list of pruned clusters.
+     */
+    public LinkedList<RectangularClusterTracker.Cluster> getPruneList() {
         return this.pruneList;
     }
     protected static final float fullbrightnessLifetime = 1000000;
