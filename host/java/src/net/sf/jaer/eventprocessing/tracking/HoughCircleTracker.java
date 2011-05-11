@@ -21,7 +21,7 @@ import java.awt.*;
 import java.awt.event.*;
 
 import javax.swing.*;
-import org.capocaccia.cne.jaer.cne2011.WeightedEvent;
+import ch.unizh.ini.jaer.projects.labyrinthkalman.WeightedEvent;
 
 /**
  * A simple circle tracker based on a hough transform.
