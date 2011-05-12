@@ -27,6 +27,10 @@ import net.sf.jaer.graphics.FrameAnnotater;
 public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
 
 	private ArrayList< LabyrinthBallKalmanFilter > filters;
+	private ArrayList< boolean[] > lastUpdates;
+	private final int nLastUpdates = 10;
+	private int lastUpdateIndex;
+	private LabyrinthBallKalmanFilter currentBestFilter;
 	
     // the timestamp of the most recent received event
     private int t = -1;
@@ -35,6 +39,7 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
     private double measurementSigma = getDouble("measurementSigma", 3.0);
     private double processSigma = getDouble("processSigma", 100.0);
     private double measurementThreshold = getDouble("measurementThreshold", 3.0);
+    private double maxPositionVariance = 10 * 10;
 
     private boolean annotationEnabled = true;
     LabyrinthBallController controller;
@@ -49,6 +54,10 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
         
         filters = new ArrayList< LabyrinthBallKalmanFilter >();
         filters.add( new LabyrinthBallKalmanFilter() );
+        currentBestFilter = filters.get(0);
+        lastUpdates = new ArrayList< boolean[] >();
+        lastUpdates.add( new boolean[ nLastUpdates ] );
+        lastUpdateIndex = 0;
 
         setPropertyTooltip("processSigma","standard deviation of acceleration noise [px/s^2]");
         setPropertyTooltip("measurementThreshold","maximum mahalanobis distance to accept a measurement for update");
@@ -140,6 +149,11 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
 		}
 		t = timestamp;
 
+		for ( int i = 0; i < filters.size(); ++i )
+		{
+			lastUpdates.get( i )[ lastUpdateIndex ] = false;			
+		}
+		
 		final double[] meas = new double[ 2 ];
 		for ( BasicEvent event : in )
 		{
@@ -150,18 +164,22 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
 			// find the filter that best matches this measurement
 
 			LabyrinthBallKalmanFilter bestFilter = null;
-			for ( LabyrinthBallKalmanFilter filter : filters )
+			int bestFilterIndex = 0;
+			for ( int i = 0; i < filters.size(); ++i )
 			{
+				LabyrinthBallKalmanFilter filter = filters.get( i );
 				double distance = filter.mahalanobisToMeasurement( meas );
 				if ( distance < minDistance )
 				{
 					minDistance = distance;
 					bestFilter = filter;
+					bestFilterIndex = i;
 				}
 			}
 			if ( ( bestFilter != null ) && ( minDistance <= measurementThreshold ) )
 			{
 				bestFilter.correct( meas );
+				lastUpdates.get( bestFilterIndex )[ lastUpdateIndex ] = true;
 			}
 			else
 			{
@@ -172,9 +190,45 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
 				bestFilter.getMu()[ 0 ] = meas[ 0 ];
 				bestFilter.getMu()[ 1 ] = meas[ 1 ];
 				filters.add( bestFilter );
+				boolean[] lu = new boolean[ nLastUpdates ];
+				lu[ lastUpdateIndex ] = true;
+				lastUpdates.add( lu );
 				System.out.println( filters.size() + " Kalman filters" );
 			}
 		}
+		
+		// clean up old filters
+		for ( int i = 0; i < filters.size(); )
+		{
+			LabyrinthBallKalmanFilter filter = filters.get( i );
+			if ( filter.getSigma()[0][0] > maxPositionVariance )
+			{
+				filters.remove( i );
+				lastUpdates.remove( i );
+			}
+			else
+				++i;
+		}
+		
+		// select current best filter
+		int bestFilterN = Integer.MIN_VALUE;
+		for ( int i = 0; i < filters.size(); ++i )
+		{
+			boolean[] lu = lastUpdates.get( i );
+			int n = 0;
+			for ( int k = 0; k < lu.length; ++k )
+				if ( lu[k] )
+					++n;
+			if ( n > bestFilterN )
+			{
+				bestFilterN = n;
+				currentBestFilter = filters.get( i );
+			}
+		}
+
+		++lastUpdateIndex;
+		if ( lastUpdateIndex >= nLastUpdates )
+			lastUpdateIndex = 0;
 
 		return in;
 	}
@@ -230,7 +284,7 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
         double vely = mu[3] * 0.1;
 
         gl.glColor3f( speedColor.x, speedColor.y, speedColor.z );
-        gl.glLineWidth(4);
+        gl.glLineWidth(2);
 
         gl.glPushMatrix();
         gl.glTranslated(mu[0], mu[1], 0);
@@ -258,34 +312,43 @@ public class KalmanEventFilter extends EventFilter2D implements FrameAnnotater {
             return;
 
         GL gl=drawable.getGL();
-        Color3f covColor = new Color3f(1,1,0);
-        Color3f speedColor = new Color3f(1,0,0);
+        Color3f covColor = new Color3f(1,1,1);
+        Color3f speedColor = new Color3f(1,1,1);
+        Color3f bestCovColor = new Color3f(1,1,0);
+        Color3f bestSpeedColor = new Color3f(1,0,0);
         for ( LabyrinthBallKalmanFilter filter : filters )
-        	paintKalmanFilterState( filter, gl, covColor, speedColor );
+        {
+        	if ( filter == currentBestFilter )
+        	{
+        		paintKalmanFilterState( filter, gl, bestCovColor, bestSpeedColor );
+        	}
+        	else
+        	{
+        		paintKalmanFilterState( filter, gl, covColor, speedColor );        		
+        	}
+        }
     }
 
     public Point2D.Float getBallPosition() {
 
-    	LabyrinthBallKalmanFilter kf = filters.get(0);
         Point2D.Float position = new Point2D.Float();
-        position.setLocation(kf.getMu()[0], kf.getMu()[1]);
+        final double[] mu = currentBestFilter.getMu(); 
+        position.setLocation(mu[0], mu[1]);
         return position;
     }
 
     public double getBallPositionX() {
-    	LabyrinthBallKalmanFilter kf = filters.get(0);
-        return kf.getMu()[0];
+        return currentBestFilter.getMu()[0];
     }
 
     public double getBallPositionY() {
-    	LabyrinthBallKalmanFilter kf = filters.get(0);
-        return kf.getMu()[1];
+        return currentBestFilter.getMu()[1];
     }
-    public Point2D.Float getBallVelocity() {
 
-    	LabyrinthBallKalmanFilter kf = filters.get(0);
+    public Point2D.Float getBallVelocity() {
+        final double[] mu = currentBestFilter.getMu(); 
         Point2D.Float position = new Point2D.Float();
-        position.setLocation(kf.getMu()[2], kf.getMu()[3]);
+        position.setLocation(mu[2], mu[3]);
         return position;
     }
 }
